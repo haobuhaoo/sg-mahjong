@@ -57,24 +57,24 @@ class Wind(Honor):
 
 # Bonus tiles
 class AnimalType(Enum):
-    CAT = ("Cat", 0)
-    RAT = ("Rat", 0)
-    CHICKEN = ("Chicken", 0)
-    CENTIPEDE = ("Centipede", 0)
+    CAT = ("Cat", -1)
+    RAT = ("Rat", -1)
+    CHICKEN = ("Chicken", -2)
+    CENTIPEDE = ("Centipede", -2)
 
 
 class FlowerType(Enum):
-    PLUM = ("Plum", 1)
-    ORCHID = ("Orchid", 2)
-    CHRYSANTHEMUM = ("Chrysanthemum", 3)
-    BAMBOO = ("Bamboo", 4)
+    PLUM = ("Plum", 0)
+    ORCHID = ("Orchid", 1)
+    CHRYSANTHEMUM = ("Chrysanthemum", 2)
+    BAMBOO = ("Bamboo", 3)
 
 
 class SeasonType(Enum):
-    SPRING = ("Spring", 1)
-    SUMMER = ("Summer", 2)
-    AUTUMN = ("Autumn", 3)
-    WINTER = ("Winter", 4)
+    SPRING = ("Spring", 0)
+    SUMMER = ("Summer", 1)
+    AUTUMN = ("Autumn", 2)
+    WINTER = ("Winter", 3)
 
 
 class Bonus:
@@ -83,6 +83,9 @@ class Bonus:
 
     def __str__(self):
         return f"{self.type.value[0]}"
+
+    def getOrdering(self):
+        return self.type.value[1]
 
 
 class Animal(Bonus):
@@ -107,4 +110,3 @@ class Season(Bonus):
 
     def __str__(self):
         return super().__str__()
-
