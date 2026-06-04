@@ -4,10 +4,10 @@ from backend.entity.player import Player
 
 def main():
     try:
-        allTiles = GameTable.initialize_table()
-        game_table = GameTable(0, allTiles)
-        player = Player()
-        game_table.dealStartingTiles(0, player)
+        all_tiles = GameTable.initialize_table()
+        game_table = GameTable(0, all_tiles)
+        player = Player(0)
+        game_table.deal_starting_tiles(player)
         print(player)
     except ValueError as err:
         print(f"Error: {err}")
