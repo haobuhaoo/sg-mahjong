@@ -32,18 +32,6 @@ class GameTable:
         self.end_idx = -1
 
     @staticmethod
-    def _create_suit_tiles():
-        return [Suit(suit, number) for suit in SuitType for number in range(1, 10)]
-
-    @staticmethod
-    def _create_honor_tiles():
-        return [Wind(wind) for wind in WindType] + [Dragon(dragon) for dragon in DragonType]
-
-    @staticmethod
-    def _create_bonus_tiles():
-        return [Animal(animal) for animal in AnimalType] + [Flower(flower) for flower in FlowerType] + [Season(season) for season in SeasonType]
-
-    @staticmethod
     def initialize_table():
         all_tiles = []
         for _ in range(4):
@@ -53,6 +41,45 @@ class GameTable:
 
         random.shuffle(all_tiles)
         return all_tiles
+
+    @staticmethod
+    def _create_suit_tiles():
+        return [Suit(suit, number) for suit in SuitType for number in range(1, 10)]
+
+    @staticmethod
+    def _create_honor_tiles():
+        return [Wind(wind) for wind in WindType] + [
+            Dragon(dragon) for dragon in DragonType
+        ]
+
+    @staticmethod
+    def _create_bonus_tiles():
+        return (
+            [Animal(animal) for animal in AnimalType]
+            + [Flower(flower) for flower in FlowerType]
+            + [Season(season) for season in SeasonType]
+        )
+
+    def deal_starting_tiles(self, player: Player):
+        starting_hand, bonus_tiles = self._split_tiles(
+            self._starting_tile_indices(player.get_position())
+        )
+        replaced, bonus = self._replace_bonus_tile(bonus_tiles)
+        player.add_to_hand(starting_hand + replaced)
+        player.add_bonus_tile(bonus)
+
+    def draw_tile(self):
+        tile = self.all_tiles[self.start_idx]
+        self.start_idx += 1
+        return tile
+
+    def replace_tile(self):
+        tile = self.all_tiles[self.end_idx]
+        self.end_idx -= 1
+        return tile
+
+    def is_bonus_tile(self, tile: Tile):
+        return isinstance(tile, Bonus)
 
     def _starting_tile_indices(self, position: int):
         indices = [position * 4 + i * 16 + j for i in range(3) for j in range(4)]
@@ -72,23 +99,7 @@ class GameTable:
                 starting_hand.append(tile)
         return starting_hand, bonus_tiles
 
-    def deal_starting_tiles(self, player: Player):
-        starting_hand, bonus_tiles = self._split_tiles(self._starting_tile_indices(player.get_position()))
-        replaced, bonus = self.replace_bonus_tile(bonus_tiles)
-        player.add_to_hand(starting_hand + replaced)
-        player.add_bonus_tile(bonus)
-
-    def draw_tile(self):
-        tile = self.all_tiles[self.start_idx]
-        self.start_idx += 1
-        return tile
-
-    def replace_tile(self):
-        tile = self.all_tiles[self.end_idx]
-        self.end_idx -= 1
-        return tile
-
-    def replace_bonus_tile(self, tiles: list[Bonus]):
+    def _replace_bonus_tile(self, tiles: list[Bonus]):
         if len(tiles) == 0:
             return ([], [])
 
@@ -106,6 +117,3 @@ class GameTable:
             replacement_tiles.append(tile)
 
         return replacement_tiles, bonus_tiles
-
-    def is_bonus_tile(self, tile: Tile):
-        return isinstance(tile, Bonus)

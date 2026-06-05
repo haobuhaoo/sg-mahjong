@@ -5,7 +5,15 @@ from enum import Enum
 class Tile(ABC):
     @abstractmethod
     def sort_key(self):
+        # Relative order of tiles (ascending):
+        # Non-bonus tiles -- Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9),
+        #                    Zhong, Fa, Bai, Dong, Nan, Xi, Bei
+        # Bonus tiles -- Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum,
+        #                Bamboo, Spring, Summer, Autumn, Winter
         pass
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self})"
 
 
 # Suited tiles
@@ -24,6 +32,9 @@ class Suit(Tile):
 
     def __str__(self):
         return f"{self.number} {self.type.value}"
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.type.value}, {self.number})"
 
     def sort_key(self):
         order = {
@@ -54,6 +65,9 @@ class Honor(ABC):
 
     def __str__(self):
         return f"{self.type.value}"
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.type.value})"
 
 
 class Dragon(Honor):
@@ -117,6 +131,9 @@ class Bonus(Tile):
 
     def __str__(self):
         return f"{self.type.value[0]}"
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.type.value[0]})"
 
     def get_ordering(self):
         return self.type.value[1]

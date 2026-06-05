@@ -9,6 +9,7 @@ class Player:
         self.tai = tai
         self.hand_tile: list[Tile] = []
         self.bonus_tile: list[Bonus] = []
+        self.open_tile: list[Tile] = []
         self.animals = 0
         self.flowers = 0
         self.seasons = 0
@@ -18,11 +19,21 @@ class Player:
 
     def __str__(self):
         return (
-            f"Tai: {self.tai}"
+            f"Player {self.position + 1}"
+            + f"\nTai: {self.tai}"
             + "\nBonus tiles: "
             + ", ".join([str(t) for t in self.bonus_tile])
+            + "\nOpen tiles: "
+            + ", ".join([str(t) for t in self.open_tile])
             + "\nHand: "
             + ", ".join([str(t) for t in self.hand_tile])
+        )
+
+    def __repr__(self):
+        return (
+            f"Player(position={self.position}, tai={self.tai}, "
+            f"hand_tile={self.hand_tile}, bonus_tile={self.bonus_tile}, "
+            f"open_tile={self.open_tile})"
         )
 
     def get_position(self):
@@ -32,18 +43,18 @@ class Player:
         self.tai += increment
 
     def add_bonus_tile(self, bonus: list[Bonus]):
-        self.tabulate_bonus_tile(bonus)
+        self._tabulate_bonus_tile(bonus)
         self.bonus_tile += bonus
-        self.sort_tiles(self.bonus_tile)
+        self._sort_tiles(self.bonus_tile)
 
     def add_to_hand(self, hand_tile: list[Tile]):
         self.hand_tile += hand_tile
-        self.sort_tiles(self.hand_tile)
+        self._sort_tiles(self.hand_tile)
 
-    def sort_tiles(self, tiles: list[Tile]):
+    def _sort_tiles(self, tiles: list[Tile]):
         tiles.sort(key=lambda tile: tile.sort_key())
 
-    def tabulate_bonus_tile(self, bonus_tile: list[Bonus]):
+    def _tabulate_bonus_tile(self, bonus_tile: list[Bonus]):
         for tile in bonus_tile:
             order = tile.get_ordering()
             if isinstance(tile, Animal):
