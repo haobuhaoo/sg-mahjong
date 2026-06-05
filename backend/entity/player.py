@@ -32,8 +32,8 @@ class Player:
     def __repr__(self):
         return (
             f"Player(position={self.position}, tai={self.tai}, "
-            f"hand_tile={self.hand_tile}, bonus_tile={self.bonus_tile}, "
-            f"open_tile={self.open_tile})"
+            f"bonus_tile={self.bonus_tile}, open_tile={self.open_tile}, "
+            f"hand_tile={self.hand_tile})"
         )
 
     def get_position(self):

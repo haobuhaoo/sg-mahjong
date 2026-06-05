@@ -1,6 +1,5 @@
 from backend.entity.game_table import GameTable
 from backend.entity.player import Player
-from backend.entity.tiles import Dragon, DragonType, Suit, SuitType
 
 
 def main():
@@ -15,7 +14,7 @@ def main():
         game_table.deal_starting_tiles(player_2)
         game_table.deal_starting_tiles(player_3)
         game_table.deal_starting_tiles(player_4)
-        print(player_1)
+        print(repr(player_1))
         print(player_2)
         print(player_3)
         print(player_4)

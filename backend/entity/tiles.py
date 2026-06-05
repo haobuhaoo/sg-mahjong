@@ -34,7 +34,7 @@ class Suit(Tile):
         return f"{self.number} {self.type.value}"
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.type.value}, {self.number})"
+        return f"{self.__class__.__name__}({self.type}, {self.number})"
 
     def sort_key(self):
         order = {
@@ -67,7 +67,7 @@ class Honor(ABC):
         return f"{self.type.value}"
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.type.value})"
+        return f"{self.__class__.__name__}({self.type})"
 
 
 class Dragon(Honor):
@@ -133,7 +133,7 @@ class Bonus(Tile):
         return f"{self.type.value[0]}"
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.type.value[0]})"
+        return f"{self.__class__.__name__}({self.type})"
 
     def get_ordering(self):
         return self.type.value[1]
