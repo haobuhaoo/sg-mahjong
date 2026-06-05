@@ -1,4 +1,4 @@
-from backend.entity.tiles import Animal, Bonus, Flower, Season, Tile
+from backend.entity.tiles import Animal, Bonus, Flower, Season, Tile, WindType
 
 
 class Player:
@@ -6,6 +6,7 @@ class Player:
         if position < 0 or position > 3:
             raise ValueError("Starting position must be between 0 and 3")
         self.position = position
+        self.seat_wind = list(WindType)[position]
         self.tai = tai
         self.hand_tile: list[Tile] = []
         self.bonus_tile: list[Bonus] = []
@@ -20,7 +21,8 @@ class Player:
     def __str__(self):
         return (
             f"Player {self.position + 1}"
-            + f"\nTai: {self.tai}"
+            f"\nSeat wind: {self.seat_wind.value}"
+            f"\nTai: {self.tai}"
             + "\nBonus tiles: "
             + ", ".join([str(t) for t in self.bonus_tile])
             + "\nOpen tiles: "
@@ -31,9 +33,9 @@ class Player:
 
     def __repr__(self):
         return (
-            f"Player(position={self.position}, tai={self.tai}, "
-            f"bonus_tile={self.bonus_tile}, open_tile={self.open_tile}, "
-            f"hand_tile={self.hand_tile})"
+            f"Player(position={self.position}, seat_wind={self.seat_wind}, "
+            f"tai={self.tai}, bonus_tile={self.bonus_tile}, "
+            f"open_tile={self.open_tile}, hand_tile={self.hand_tile})"
         )
 
     def get_position(self):
@@ -50,6 +52,16 @@ class Player:
     def add_to_hand(self, hand_tile: list[Tile]):
         self.hand_tile += hand_tile
         self._sort_tiles(self.hand_tile)
+
+    def receive_tile(self, tile: Tile):
+        self.add_to_hand([tile])
+
+    def discard_tile(self, idx: int):
+        if idx < 0 or idx >= len(self.hand_tile):
+            raise ValueError(
+                f"Invalid tile position chosen. Tile position between 0 and {len(self.hand_tile) - 1}"
+            )
+        return self.hand_tile.pop(idx)
 
     def _sort_tiles(self, tiles: list[Tile]):
         tiles.sort(key=lambda tile: tile.sort_key())
