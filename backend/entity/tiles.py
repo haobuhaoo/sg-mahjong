@@ -24,7 +24,7 @@ class SuitType(Enum):
 
 
 class Suit(Tile):
-    def __init__(self, type: SuitType, number):
+    def __init__(self, type: SuitType, number: int):
         self.type = type
         if number < 1 or number > 9:
             raise ValueError("Suit tiles are between 1 and 9")
@@ -35,6 +35,16 @@ class Suit(Tile):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.type}, {self.number})"
+
+    def __eq__(self, value):
+        return (
+            isinstance(value, Suit)
+            and self.type == value.type
+            and self.number == value.number
+        )
+
+    def __hash__(self):
+        return hash(self.type, self.number)
 
     def sort_key(self):
         order = {
@@ -69,6 +79,9 @@ class Honor(ABC):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.type})"
 
+    def __hash__(self):
+        return hash(self.type)
+
 
 class Dragon(Honor):
     def __init__(self, type: DragonType):
@@ -76,6 +89,12 @@ class Dragon(Honor):
 
     def __str__(self):
         return super().__str__()
+
+    def __eq__(self, value):
+        return isinstance(value, Dragon) and self.type == value.type
+
+    def __hash__(self):
+        return super().__hash__()
 
     def sort_key(self):
         dragon_order = {
@@ -92,6 +111,12 @@ class Wind(Honor):
 
     def __str__(self):
         return super().__str__()
+
+    def __eq__(self, value):
+        return isinstance(value, Wind) and self.type == value.type
+
+    def __hash__(self):
+        return super().__hash__()
 
     def sort_key(self):
         wind_order = {
@@ -135,6 +160,9 @@ class Bonus(Tile):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.type})"
 
+    def __hash__(self):
+        return hash(self.type)
+
     def get_ordering(self):
         return self.type.value[1]
 
@@ -145,6 +173,12 @@ class Animal(Bonus):
 
     def __str__(self):
         return super().__str__()
+
+    def __eq__(self, value):
+        return isinstance(value, Animal)
+
+    def __hash__(self):
+        return hash(Animal)
 
     def sort_key(self):
         animal_order = {
@@ -163,6 +197,12 @@ class Flower(Bonus):
     def __str__(self):
         return super().__str__()
 
+    def __eq__(self, value):
+        return isinstance(value, Flower)
+
+    def __hash__(self):
+        return hash(Flower)
+
     def sort_key(self):
         flower_order = {
             FlowerType.PLUM: 0,
@@ -179,6 +219,12 @@ class Season(Bonus):
 
     def __str__(self):
         return super().__str__()
+
+    def __eq__(self, value):
+        return isinstance(value, Season)
+
+    def __hash__(self):
+        return hash(Season)
 
     def sort_key(self):
         season_order = {
