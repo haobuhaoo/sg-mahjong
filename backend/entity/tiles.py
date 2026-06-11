@@ -5,11 +5,13 @@ from enum import Enum
 class Tile(ABC):
     @abstractmethod
     def sort_key(self):
-        # Relative order of tiles (ascending):
-        # Non-bonus tiles -- Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9),
-        #                    Zhong, Fa, Bai, Dong, Nan, Xi, Bei
-        # Bonus tiles -- Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum,
-        #                Bamboo, Spring, Summer, Autumn, Winter
+        """
+        Sort the tiles in relative order (ascending):
+
+        Non-bonus tiles: Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9), Zhong, Fa, Bai, Dong, Nan, Xi, Bei
+
+        Bonus tiles: Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum, Bamboo, Spring, Summer, Autumn, Winter
+        """
         pass
 
     def __repr__(self):
@@ -44,7 +46,7 @@ class Suit(Tile):
         )
 
     def __hash__(self):
-        return hash(self.type, self.number)
+        return hash((self.type, self.number))
 
     def sort_key(self):
         order = {

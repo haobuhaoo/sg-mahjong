@@ -36,9 +36,9 @@ def main():
         # player_1.add_tai()
         # player_1.hand_tile = []
         # player_1.open_tile = [t, t, t]
-        # player_1.add_to_hand([t, t, Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 5)])
+        # player_1.add_to_hand([t, Suit(SuitType.DOT, 8), Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 5)])
         # print(player_1.check_hand(3, t))
-        # print(game_table.pong_tile(player_1, t))
+        # print(game_table.chi_tile(player_1, t))
         # print(player_1)
         # print(player_1.hand_tile)
         # print(player_1.open_tile)
@@ -80,7 +80,7 @@ def main():
                 game_table.player_draw_tile(plist[(idx + 1) % 4])
         print(game_table)
         # print(player_1)
-    except ValueError as err:
+    except Exception as err:
         print(f"Error: {err}")
 
 
