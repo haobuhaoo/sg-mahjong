@@ -236,3 +236,9 @@ class Season(Bonus):
             SeasonType.WINTER: 3,
         }
         return (2, season_order[self.type])
+
+
+class MeldType:
+    CHI = "chi"
+    PONG = "pong"
+    GANG = "gang"

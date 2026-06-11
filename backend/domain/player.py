@@ -1,8 +1,7 @@
 from collections import Counter
 import random
 
-from backend.entity.meld import MeldType
-from backend.entity.tiles import (
+from backend.domain.tiles import (
     Animal,
     Bonus,
     Dragon,
@@ -12,10 +11,11 @@ from backend.entity.tiles import (
     Tile,
     Wind,
     WindType,
+    MeldType,
 )
-from backend.game.rules import get_invalid_discard_tiles
-from backend.utility.errors import DiscardError, InvalidActionError
-from backend.utility.helper import is_bonus_tile, is_honor_tile, is_suit_tile
+from backend.rules.init import get_invalid_discard_tiles
+from backend.utils.errors import DiscardError, InvalidActionError
+from backend.utils.helper import is_bonus_tile, is_honor_tile, is_suit_tile
 
 
 class Player:
@@ -82,7 +82,7 @@ class Player:
         self._sort_tiles(self.bonus_tile)
 
     def add_to_hand(self, hand_tile: list[Tile]) -> None:
-        """Add one or more tiles to the player's hand and keep the hand sorted."""
+        """Add tiles to the player's hand and keep the hand sorted."""
         self.hand_tile += hand_tile
         self._sort_tiles(self.hand_tile)
 
@@ -138,8 +138,8 @@ class Player:
         Discard a tile from the player's hand and clear one-turn invalid discard restrictions.
 
         Raises:
-            IndexError: If idx is out of bounds
-            DiscardError: If tile at idx is an invalid discard tile
+            IndexError: If ``idx`` is out of bounds
+            DiscardError: If tile at ``idx`` is an invalid discard tile
         """
         if idx < 0 or idx >= len(self.hand_tile):
             raise IndexError(
@@ -156,6 +156,7 @@ class Player:
 
     def pick_tile_to_discard(self) -> int:
         """Choose a random index from the player's hand for discard."""
+        # TODO: let user choose tile to discard from hand
         return random.Random().randint(0, len(self.hand_tile) - 1)
 
     def chi_tile(self, tile_chi: Suit) -> None:
@@ -163,7 +164,7 @@ class Player:
         Perform chi on the given suit tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If tile_chi has no neighbouring tiles in player's hand
+            InvalidActionError: If ``tile_chi`` has no neighbouring tiles in player's hand
         """
         neighbour_tiles = self._find_chi_tiles(tile_chi)
         if neighbour_tiles is None:
@@ -177,7 +178,7 @@ class Player:
         Perform pong on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 2 of tile_pong in hand
+            InvalidActionError: If player does not have 2 of ``tile_pong`` in hand
         """
         if not self._check_pong(tile_pong):
             raise InvalidActionError(
@@ -192,8 +193,8 @@ class Player:
         Perform gang on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 3 of tile_gang in hand or
-                3 of tile_gang in open set
+            InvalidActionError: If player does not have 3 of ``tile_gang`` in hand or
+                3 of ``tile_gang`` in open set
         """
         if not self._check_gang(tile_gang):
             raise InvalidActionError(
@@ -276,6 +277,7 @@ class Player:
 
     def _check_hu(self, tile: Tile) -> bool:
         """Return True if the player can hu on the given tile (placeholder logic)."""
+        # TODO: implement hu logic
         return True
 
     def _find_chi_tiles(self, tile: Suit) -> list[Suit, Suit] | None:

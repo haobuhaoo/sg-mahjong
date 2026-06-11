@@ -1,5 +1,4 @@
-from backend.entity.meld import MeldType
-from backend.entity.tiles import Tile
+from backend.domain.tiles import MeldType, Tile
 
 
 class DiscardError(Exception):
