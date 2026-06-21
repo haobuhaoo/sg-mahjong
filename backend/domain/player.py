@@ -13,6 +13,7 @@ from backend.domain.tiles import (
     WindType,
     MeldType,
 )
+from backend.rules.hu import can_hu
 from backend.rules.init import get_invalid_discard_tiles
 from backend.utils.errors import DiscardError, InvalidActionError
 from backend.utils.helper import is_bonus_tile, is_honor_tile, is_suit_tile
@@ -37,7 +38,7 @@ class Player:
         self.tai = tai
         self.hand_tile: list[Tile] = []
         self.bonus_tile: list[Bonus] = []
-        self.open_tile: list[Tile] = []
+        self.open_tile: list[list[Tile]] = []
 
         # internals
         self._animals_max_tai = False
@@ -48,6 +49,9 @@ class Player:
         self._invalid_discard_tiles: set[Tile] = set()
 
     def __str__(self):
+        open_tiles = "; ".join(
+            ", ".join(str(t) for t in meld) for meld in self.open_tile
+        )
         return (
             f"Player {self.position + 1}"
             f"\nSeat wind: {self.seat_wind.value}"
@@ -55,7 +59,7 @@ class Player:
             + "\nBonus tiles: "
             + ", ".join([str(t) for t in self.bonus_tile])
             + "\nOpen tiles: "
-            + ", ".join([str(t) for t in self.open_tile])
+            + open_tiles
             + "\nHand: "
             + ", ".join([str(t) for t in self.hand_tile])
         )
@@ -87,9 +91,13 @@ class Player:
         self._sort_tiles(self.hand_tile)
 
     def add_open_tile(self, open_tile: list[Tile]) -> None:
-        """Add tiles to the player's open set and keep them sorted."""
-        self.open_tile += open_tile
-        self._sort_tiles(self.open_tile)
+        """Add a revealed meld to the player's open melds."""
+        self._sort_tiles(open_tile)
+        self.open_tile.append(open_tile)
+
+    def get_open_tiles(self) -> list[Tile]:
+        """Return a flat list of all tiles in the player's opened melds."""
+        return [tile for meld in self.open_tile for tile in meld]
 
     def check_bonus_tile(self, tile: Tile) -> bool:
         """Check if tile is a bonus tile, returning True if it is and adding it
@@ -272,12 +280,14 @@ class Player:
         return 2 <= self.hand_tile.count(tile) <= 3
 
     def _check_gang(self, tile: Tile) -> bool:
-        """Return True if the player can form a gang from hand or open set."""
-        return self.hand_tile.count(tile) == 3 or self.open_tile.count(tile) == 3
+        """Return True if the player can form a gang from hand or an exposed pong."""
+        return self.hand_tile.count(tile) == 3 or any(
+            len(meld) == 3 and all(meld_tile == tile for meld_tile in meld)
+            for meld in self.open_tile
+        )
 
     def _check_hu(self, tile: Tile) -> bool:
-        """Return True if the player can hu on the given tile (placeholder logic)."""
-        # TODO: implement hu logic
+        """Return True if the player can hu on the given tile."""
         return True
 
     def _find_chi_tiles(self, tile: Suit) -> list[Suit, Suit] | None:
@@ -337,8 +347,20 @@ class Player:
             self.add_open_tile([tile, tile, tile, tile])
             self._last_meld_type = MeldType.GANG
             self._last_meld_from_hand = [tile, tile, tile]
-        elif self.open_tile.count(tile) == 3:
-            self.add_open_tile([tile])
+        else:
+            pong_meld = next(
+                (
+                    meld
+                    for meld in self.open_tile
+                    if len(meld) == 3 and all(meld_tile == tile for meld_tile in meld)
+                ),
+                None,
+            )
+            if pong_meld is None:
+                return
+
+            pong_meld.append(tile)
+            self._sort_tiles(pong_meld)
             self._last_meld_type = MeldType.GANG
             self._last_meld_from_hand = []
 

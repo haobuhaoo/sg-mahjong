@@ -142,7 +142,8 @@ class TestChiTile:
         )
         result = engine.chi_tile(p, Suit(SuitType.DOT, 5))
         assert isinstance(result, Suit)
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
 
     def test_error_propagates_on_invalid_chi(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -168,7 +169,8 @@ class TestExecuteChi:
         p = make_player()
         p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4)])
         engine.execute_chi(p, Suit(SuitType.DOT, 5))
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
         assert len(p.hand_tile) == 0
 
 
@@ -180,7 +182,8 @@ class TestPongTile:
         p.add_to_hand([tile, tile, Suit(SuitType.DOT, 9)])
         result = engine.pong_tile(p, tile)
         assert isinstance(result, Suit)
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
 
     def test_updates_tai_for_honor_tiles(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -204,7 +207,8 @@ class TestExecutePong:
         tile = Wind(WindType.DONG)
         p.add_to_hand([tile, tile])
         engine.execute_pong(p, tile)
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
         assert p.tai >= 1
 
 
@@ -216,7 +220,8 @@ class TestGangTile:
         p.add_to_hand([tile, tile, tile])
         result = engine.gang_tile(p, tile)
         assert isinstance(result, Suit)
-        assert len(p.open_tile) == 4
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
 
     def test_gang_draws_from_dead_wall(self):
         wall = [Suit(SuitType.DOT, 1)] * 100
@@ -233,10 +238,11 @@ class TestGangTile:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [tile, tile, tile]
+        p.open_tile = [[tile, tile, tile]]
         result = engine.gang_tile(p, tile)
         assert isinstance(result, Suit)
-        assert len(p.open_tile) == 4
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
 
     def test_error_propagates_on_invalid_gang(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -252,7 +258,8 @@ class TestExecuteGang:
         tile = Dragon(DragonType.FA)
         p.add_to_hand([tile, tile, tile])
         engine.execute_gang(p, tile)
-        assert len(p.open_tile) == 4
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
         assert p.tai == 1
 
 

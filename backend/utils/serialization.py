@@ -15,7 +15,7 @@ def serialize_player(player: Player) -> dict:
         "seat_wind": player.seat_wind.value,
         "tai": player.tai,
         "hand_tile": [serialize_tile(t) for t in player.hand_tile],
-        "open_tile": [serialize_tile(t) for t in player.open_tile],
+        "open_tile": [serialize_tile(t) for t in player.get_open_tiles()],
         "bonus_tile": [serialize_tile(t) for t in player.bonus_tile],
     }
 

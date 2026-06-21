@@ -175,13 +175,14 @@ class TestAddOpenTile:
         p = make_player()
         tiles = [Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 1)]
         p.add_open_tile(tiles)
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
 
     def test_sorts_open_tiles(self):
         p = make_player()
         tiles = [Suit(SuitType.DOT, 9), Suit(SuitType.DOT, 1)]
         p.add_open_tile(tiles)
-        keys = [t.sort_key() for t in p.open_tile]
+        keys = [t.sort_key() for t in p.open_tile[0]]
         assert keys == sorted(keys)
 
 
@@ -235,8 +236,9 @@ class TestCanGang:
 
     def test_true_with_three_in_open(self):
         p = make_player()
-        p.open_tile = [Suit(SuitType.DOT, 1)] * 3
-        assert p.can_gang(Suit(SuitType.DOT, 1)) is True
+        tile = Suit(SuitType.DOT, 1)
+        p.open_tile = [[tile, tile, tile]]
+        assert p.can_gang(tile) is True
 
     def test_false_with_two_in_hand(self):
         p = make_player()
@@ -379,10 +381,11 @@ class TestChiTile:
         p = make_player()
         p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4)])
         p.chi_tile(Suit(SuitType.DOT, 5))
-        assert Suit(SuitType.DOT, 3) in p.open_tile
-        assert Suit(SuitType.DOT, 4) in p.open_tile
-        assert Suit(SuitType.DOT, 5) in p.open_tile
-        assert len(p.open_tile) == 3
+        assert Suit(SuitType.DOT, 3) in p.get_open_tiles()
+        assert Suit(SuitType.DOT, 4) in p.get_open_tiles()
+        assert Suit(SuitType.DOT, 5) in p.get_open_tiles()
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
         assert len(p.hand_tile) == 0
 
     def test_sets_invalid_discard_tiles_after_chi(self):
@@ -401,8 +404,9 @@ class TestChiTile:
         p = make_player()
         p.add_to_hand([Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 4)])
         p.chi_tile(Suit(SuitType.DOT, 3))
-        assert len(p.open_tile) == 3
-        assert Suit(SuitType.DOT, 3) in p.open_tile
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
+        assert Suit(SuitType.DOT, 3) in p.get_open_tiles()
 
 
 class TestPongTile:
@@ -411,7 +415,8 @@ class TestPongTile:
         tile = Suit(SuitType.DOT, 5)
         p.add_to_hand([tile, tile])
         p.pong_tile(tile)
-        assert len(p.open_tile) == 3
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 3
         assert len(p.hand_tile) == 0
 
     def test_sets_invalid_discard_tiles_after_pong(self):
@@ -439,15 +444,17 @@ class TestGangTile:
         tile = Suit(SuitType.DOT, 5)
         p.add_to_hand([tile, tile, tile])
         p.gang_tile(tile)
-        assert len(p.open_tile) == 4
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
         assert len(p.hand_tile) == 0
 
     def test_gang_from_open_pong(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [tile, tile, tile]
+        p.open_tile = [[tile, tile, tile]]
         p.gang_tile(tile)
-        assert len(p.open_tile) == 4
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
 
     def test_sets_invalid_discard_tiles_after_gang(self):
         p = make_player()
