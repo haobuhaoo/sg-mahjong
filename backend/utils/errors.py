@@ -1,4 +1,4 @@
-from backend.domain.tiles import MeldType, Tile
+from backend.domain.tiles import Tile
 
 
 class DiscardError(Exception):
@@ -9,7 +9,7 @@ class DiscardError(Exception):
 
 
 class InvalidActionError(Exception):
-    def __init__(self, msg: str, action: MeldType, tile: Tile):
+    def __init__(self, msg: str, action: str, tile: Tile | None):
         """Raised when action done is invalid."""
         super().__init__(msg)
         self.action = action

@@ -40,6 +40,9 @@ class Player:
         self.bonus_tile: list[Bonus] = []
         self.open_tile: list[list[Tile]] = []
 
+        self.drawn_tile: Tile | None = None
+        self.drawn_bonus_tiles: list[Tile] = []
+
         # internals
         self._animals_max_tai = False
         self._flowers_max_tai = False
@@ -68,7 +71,8 @@ class Player:
         return (
             f"Player(position={self.position}, seat_wind={self.seat_wind}, "
             f"tai={self.tai}, bonus_tile={self.bonus_tile}, "
-            f"open_tile={self.open_tile}, hand_tile={self.hand_tile})"
+            f"open_tile={self.open_tile}, hand_tile={self.hand_tile}, "
+            f"drawn_tile={self.drawn_tile}, drawn_bonus_tiles={self.drawn_bonus_tiles})"
         )
 
     def get_position(self) -> int:
@@ -99,11 +103,27 @@ class Player:
         """Return a flat list of all tiles in the player's opened melds."""
         return [tile for meld in self.open_tile for tile in meld]
 
+    def count_flower_season_tiles(self) -> int:
+        """Return the number of Flower and Season tiles (excluding Animals)."""
+        return sum(1 for t in self.bonus_tile if isinstance(t, (Flower, Season)))
+
+    def gang_count(self) -> int:
+        """Return the number of completed gang melds (any 4-tile open meld)."""
+        return sum(1 for meld in self.open_tile if len(meld) == 4)
+
+    def has_exposed_non_gang_melds(self) -> bool:
+        """Return True if the player has any exposed pong or chi (length-3 melds)."""
+        return any(len(meld) == 3 for meld in self.open_tile)
+
     def check_bonus_tile(self, tile: Tile) -> bool:
-        """Check if tile is a bonus tile, returning True if it is and adding it
-        to the player's bonus set."""
+        """
+        Check if tile is a bonus tile, returning True if it is and adding it
+        to the player's bonus set. Also appends to `drawn_bonus_tiles` for
+        frontend visibility.
+        """
         if is_bonus_tile(tile):
             self.add_bonus_tile([tile])
+            self.drawn_bonus_tiles.append(tile)
             return True
 
         return False
@@ -137,17 +157,36 @@ class Player:
             and self._check_chi(tile)
         )
 
+    def find_concealed_gang_tiles(self) -> list[Tile]:
+        """Return distinct tiles that appear exactly 4 times in the player's hand."""
+        counts = Counter(self.hand_tile)
+        return [t for t, c in counts.items() if c == 4]
+
+    def find_pong_upgrade_tiles(self) -> list[Tile]:
+        """Return hand tiles that match an existing open pong meld (exposed gang candidate)."""
+        return [
+            tile
+            for tile in set(self.hand_tile)
+            if any(
+                len(meld) == 3 and all(t == tile for t in meld)
+                for meld in self.open_tile
+            )
+        ]
+
     def receive_tile(self, tile: Tile) -> None:
-        """Receive a drawn tile into the player's hand."""
+        """Receive a drawn tile into the player's hand and track it as `drawn_tile`."""
         self.add_to_hand([tile])
+        self.drawn_tile = tile
 
     def discard_tile(self, idx: int) -> Tile:
         """
-        Discard a tile from the player's hand and clear one-turn invalid discard restrictions.
+        Discard a tile from the player's hand and clear one-turn invalid discard
+        restrictions. Also clears `drawn_tile` and `drawn_bonus_tiles` to signal the end
+        of the player's draw-assess window.
 
         Raises:
-            IndexError: If ``idx`` is out of bounds
-            DiscardError: If tile at ``idx`` is an invalid discard tile
+            IndexError: If `idx` is out of bounds
+            DiscardError: If tile at `idx` is an invalid discard tile
         """
         if idx < 0 or idx >= len(self.hand_tile):
             raise IndexError(
@@ -160,6 +199,8 @@ class Player:
 
         tile = self.hand_tile.pop(idx)
         self._clear_invalid_discard_tiles()
+        self.drawn_tile = None
+        self.drawn_bonus_tiles = []
         return tile
 
     def pick_tile_to_discard(self) -> int:
@@ -172,7 +213,7 @@ class Player:
         Perform chi on the given suit tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If ``tile_chi`` has no neighbouring tiles in player's hand
+            InvalidActionError: If `tile_chi` has no neighbouring tiles in player's hand
         """
         neighbour_tiles = self._find_chi_tiles(tile_chi)
         if neighbour_tiles is None:
@@ -186,7 +227,7 @@ class Player:
         Perform pong on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 2 of ``tile_pong`` in hand
+            InvalidActionError: If player does not have 2 of `tile_pong` in hand
         """
         if not self._check_pong(tile_pong):
             raise InvalidActionError(
@@ -201,8 +242,8 @@ class Player:
         Perform gang on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 3 of ``tile_gang`` in hand or
-                3 of ``tile_gang`` in open set
+            InvalidActionError: If player does not have 3 of `tile_gang` in hand or
+                3 of `tile_gang` in open set
         """
         if not self._check_gang(tile_gang):
             raise InvalidActionError(
@@ -211,6 +252,62 @@ class Player:
 
         self._make_gang_meld(tile_gang)
         self._set_invalid_discard_tiles(MeldType.GANG, tile_gang)
+
+    def make_concealed_gang(self, tile: Tile) -> None:
+        """
+        Consume 4 identical tiles from hand to form a concealed gang.
+
+        The 4 tiles are removed from the hand and added as an open meld.
+        Invalid discard restrictions are set for the gang tile.
+
+        Raises:
+            InvalidActionError: If `tile` does not appear exactly 4 times in hand.
+        """
+        if self.hand_tile.count(tile) != 4:
+            raise InvalidActionError(
+                f"Cannot form concealed gang with {tile}", MeldType.GANG, tile
+            )
+        for _ in range(4):
+            self.hand_tile.remove(tile)
+        self.add_open_tile([tile, tile, tile, tile])
+        self._last_meld_type = MeldType.GANG
+        self._last_meld_from_hand = [tile, tile, tile, tile]
+        self._set_invalid_discard_tiles(MeldType.GANG, tile)
+
+    def make_exposed_gang(self, tile: Tile) -> None:
+        """
+        Upgrade an existing open pong to an exposed gang by adding a matching hand tile.
+
+        The hand tile is discarded (consumed) and appended to the open pong meld,
+        making it a 4-tile gang. The last meld tracking is set to indicate this
+        came from an open pong upgrade, so update_tai skips re-awarding points.
+
+        Raises:
+            InvalidActionError: If `tile` is not in hand or no matching open
+                pong meld exists.
+        """
+        if self.hand_tile.count(tile) < 1:
+            raise InvalidActionError(
+                f"Cannot form exposed gang with {tile}", MeldType.GANG, tile
+            )
+        pong_meld = next(
+            (
+                meld
+                for meld in self.open_tile
+                if len(meld) == 3 and all(t == tile for t in meld)
+            ),
+            None,
+        )
+        if pong_meld is None:
+            raise InvalidActionError(
+                f"No open pong to upgrade with {tile}", MeldType.GANG, tile
+            )
+        self.discard_tile(self.hand_tile.index(tile))
+        pong_meld.append(tile)
+        self._sort_tiles(pong_meld)
+        self._last_meld_type = MeldType.GANG
+        self._last_meld_from_hand = []
+        self._set_invalid_discard_tiles(MeldType.GANG, tile)
 
     def update_tai(self, tile: Tile, prevalent_wind: WindType) -> None:
         """Update tai from a claimed tile, resetting last meld tracking when appropriate."""
@@ -234,7 +331,8 @@ class Player:
         self._last_meld_type = None
         self._last_meld_from_hand = []
 
-    # private methods
+    # Private methods
+
     def _sort_tiles(self, tiles: list[Tile]) -> None:
         """Sort a list of tiles in place using the tile sort key."""
         tiles.sort(key=lambda tile: tile.sort_key())
@@ -288,7 +386,7 @@ class Player:
 
     def _check_hu(self, tile: Tile) -> bool:
         """Return True if the player can hu on the given tile."""
-        return True
+        return can_hu(self.hand_tile, self.open_tile, tile)
 
     def _find_chi_tiles(self, tile: Suit) -> list[Suit, Suit] | None:
         """Find and return a valid chi pair from the hand for the given suit tile."""

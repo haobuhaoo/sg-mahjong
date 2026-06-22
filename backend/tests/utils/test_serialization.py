@@ -64,6 +64,9 @@ class TestSerializePlayer:
             "hand_tile",
             "open_tile",
             "bonus_tile",
+            "drawn_tile",
+            "drawn_bonus_tiles",
+            "bonus_count",
         }
 
     def test_position(self):

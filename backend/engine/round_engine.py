@@ -1,22 +1,33 @@
 from backend.domain.game_state import GameState
 from backend.domain.player import Player
 from backend.domain.tiles import Suit, Tile
+from backend.engine.turn_result import AssessResult, DrawResult
+from backend.rules.hu import can_hu, _is_thirteen_wonders
+from backend.utils.errors import InvalidActionError
 from backend.utils.helper import is_bonus_tile
 
 
 class RoundEngine:
     """
-    Orchestrates the flow of a round: dealing, drawing, discarding,
-    and executing melds (chi / pong / gang).
+    Orchestrates the flow of a round following the `Draw → Assess → Act → Discard`
+    turn structure.
 
-    All mutable game state is owned by the injected ``GameState``. This class
+    Each player's turn proceeds through four phases:
+      1. **Draw** — draw a tile from the live wall, recursively replacing bonus tiles.
+      2. **Assess** — check for wins (self-pick, flower win, event-based wins) and
+         available actions (concealed gang, exposed gang upgrade).
+      3. **Act** — player chooses to self-pick, declare a gang, or proceed.
+      4. **Discard** — player discards; other players may intercept (hu/gang/pong/chi).
+
+    All mutable game state is owned by the injected `GameState`. This class
     contains only the behavioural logic that acts on that state.
     """
 
     def __init__(self, state: GameState):
         self.state = state
 
-    # deal
+    # Setup
+
     def deal_starting_tiles(self, player: Player) -> None:
         """Deal the starting hand and handle any bonus tile replacements for player."""
         indices = self.state.get_starting_tile_indices(player.get_position())
@@ -25,26 +36,226 @@ class RoundEngine:
         player.add_to_hand(starting_hand + replaced)
         player.add_bonus_tile(all_bonus)
 
-    # draw or discard
-    def player_draw_tile(self, player: Player, is_gang: bool = False) -> None:
+    def check_heavenly_hand(self, player: Player) -> AssessResult:
         """
-        Give a drawn (or replacement) non-bonus tile to the player.
+        Check if the dealer has a winning hand immediately after dealing and bonus
+        replacement (Heavenly Hand). Only valid for position 0 with 14 tiles.
 
-        If ``is_gang`` is True, a replacement tile is drawn from the dead wall.
+        Iterates over each tile in the dealer's 14-tile hand, removes it, and
+        checks whether the remaining 13 + that tile form a winning hand.
         """
-        tile = self.state.draw_until_non_bonus(player.check_bonus_tile, is_gang)
+        if player.position != 0 or len(player.hand_tile) != 14:
+            return AssessResult()
+        for i in range(len(player.hand_tile)):
+            tile = player.hand_tile[i]
+            remaining = player.hand_tile[:i] + player.hand_tile[i + 1 :]
+            if can_hu(remaining, player.open_tile, tile):
+                return AssessResult(is_heavenly_hand=True)
+        return AssessResult()
+
+    # Phase 1: Draw
+
+    def player_draw_tile(
+        self, player: Player, players: list[Player], is_gang: bool = False
+    ) -> DrawResult:
+        """
+        Phase 1: Draw.
+
+        Pulls a tile from the live wall (or dead wall if `is_gang`), recursively
+        replacing bonus tiles. Returns a `DrawResult` so the API can surface what
+        was drawn.
+
+        If another player has 7 Flower+Season tiles and this draw yields the 8th bonus
+        tile, that player robs it (Robbing the Eighth) and `DrawResult.robbed_by` is set.
+
+        Args:
+            player: The player whose turn it is.
+            players: All players in the game (needed for Robbing the Eighth detection).
+            is_gang: If True, draw the initial tile from the dead wall
+                (used after a gang declaration).
+        """
+        player.drawn_tile = None
+        player.drawn_bonus_tiles = []
+
+        is_last = not is_gang and self.state.is_last_live_tile
+        had_bonus = False
+        robbed: Player | None = None
+
+        def collector_with_rob(tile: Tile) -> bool:
+            """
+            Bonus-tile callback for `draw_until_non_bonus` that intercepts
+            Robbing the Eighth before the drawing player collects the tile.
+
+            For each bonus tile drawn:
+            1. If any other player already has 7 Flower+Season tiles, the tile
+               is robbed — `robbed` is set and the loop stops.
+            2. Otherwise, the tile is collected normally by the drawing player
+               via `player.check_bonus_tile` and `had_bonus` is flagged.
+
+            Returns:
+                True if the tile was collected and another replacement should
+                be drawn from the dead wall; False to stop the loop.
+            """
+            nonlocal had_bonus, robbed
+            if not is_bonus_tile(tile):
+                return False
+            for p in players:
+                if p is not player and p.count_flower_season_tiles() == 7:
+                    robbed = p
+                    return False
+            had_bonus = True
+            return player.check_bonus_tile(tile)
+
+        tile = self.state.draw_until_non_bonus(collector_with_rob, is_gang)
+
+        if robbed is not None:
+            robbed.add_bonus_tile([tile])
+            return DrawResult(
+                drawn_tile=None,
+                drawn_bonus_tiles=list(player.drawn_bonus_tiles),
+                robbed_by=robbed.position,
+                is_replacement=False,
+                is_last_tile=is_last,
+            )
+
         player.receive_tile(tile)
+        return DrawResult(
+            drawn_tile=tile,
+            drawn_bonus_tiles=list(player.drawn_bonus_tiles),
+            is_replacement=had_bonus or is_gang,
+            is_last_tile=is_last,
+        )
+
+    # Phase 2: Assess
+
+    def player_assess_hand(
+        self,
+        player: Player,
+        is_replacement: bool = False,
+        is_last_tile: bool = False,
+        is_first_draw: bool = False,
+    ) -> AssessResult:
+        """
+        Phase 2: Assess.
+
+        After drawing, checks all win conditions and available actions (concealed gang,
+        exposed gang upgrade).
+
+        Accepts draw-context flags (from `DrawResult`) to detect event-based wins:
+        - Winning on Replacement Tile (`is_replacement`)
+        - Winning on the Last Available Tile (`is_last_tile` without `is_replacement`)
+        - Earthly Hand (`is_first_draw` for non-dealer).
+
+        Args:
+            player: The player whose hand is being assessed.
+            is_replacement: The drawn tile came from the dead wall.
+            is_last_tile: The draw consumed the last live wall tile.
+            is_first_draw: This is the player's first draw of the game.
+        """
+        can_sp = False
+        tile = player.drawn_tile
+        if tile is not None:
+            hand_without_tile = list(player.hand_tile)
+            if tile in hand_without_tile:
+                hand_without_tile.remove(tile)
+            can_sp = bool(can_hu(hand_without_tile, player.open_tile, tile))
+
+        return AssessResult(
+            can_self_pick=can_sp,
+            concealed_gang_tiles=player.find_concealed_gang_tiles(),
+            pong_upgrade_tiles=player.find_pong_upgrade_tiles(),
+            has_flower_win=player.count_flower_season_tiles() == 8,
+            win_on_replacement=can_sp and is_replacement,
+            win_on_last_tile=can_sp and is_last_tile and not is_replacement,
+            is_earthly_hand=can_sp and is_first_draw and player.position != 0,
+            is_eighteen_arhats=can_sp and player.gang_count() == 4,
+            is_fully_concealed=(can_sp and not player.has_exposed_non_gang_melds()),
+        )
+
+    # Phase 2a: Self-pick win
+
+    def player_self_pick(self, player: Player) -> Tile:
+        """
+        Player declares self-pick win (Self-Pick).
+
+        Returns the winning tile.
+
+        Raises:
+            InvalidActionError: If the player cannot hu with the drawn tile
+        """
+        tile = player.drawn_tile
+        if tile is None:
+            raise InvalidActionError(
+                "No drawn tile to self-pick with", "self-pick", tile
+            )
+        hand_without_tile = list(player.hand_tile)
+        if tile in hand_without_tile:
+            hand_without_tile.remove(tile)
+        if not can_hu(hand_without_tile, player.open_tile, tile):
+            raise InvalidActionError(f"Cannot self-pick with {tile}", "self-pick", tile)
+        return tile
+
+    # Phase 2b: Concealed gang
+
+    def declare_concealed_gang(
+        self, player: Player, tile: Tile, players: list[Player]
+    ) -> DrawResult | AssessResult:
+        """
+        Player declares a Concealed gang. Consumes 4 identical tiles from hand, draws
+        a replacement, and returns the draw result.
+
+        Before executing, checks if any other player can rob the concealed gang —
+        only allowed when the robber is waiting for the tile to complete Thirteen
+        Wonders (Robbing the Gang special condition).
+
+        Caller should re-run assess after this (the replacement could win).
+        """
+        for p in players:
+            if p is not player and p.can_hu(tile):
+                hand_with_tile = p.hand_tile + [tile]
+                if _is_thirteen_wonders(hand_with_tile):
+                    return AssessResult(robbing_gang_by=p.position)
+
+        player.make_concealed_gang(tile)
+        player.update_tai(tile, self.state.prevalent_wind)
+        return self.player_draw_tile(player, players, is_gang=True)
+
+    # Phase 2c: Exposed gang (pong upgrade)
+
+    def declare_exposed_gang(
+        self, player: Player, tile: Tile, players: list[Player]
+    ) -> AssessResult | DrawResult:
+        """
+        Player upgrades an open pong to an exposed gang by adding a matching
+        hand tile. Before executing, checks if any other player can rob the
+        gang.
+
+        If no one robs, returns a `DrawResult` for the replacement draw.
+        Caller should re-run assess after this.
+        """
+        for p in players:
+            if p is not player and p.can_hu(tile):
+                return AssessResult(robbing_gang_by=p.position)
+
+        player.make_exposed_gang(tile)
+        player.update_tai(tile, self.state.prevalent_wind)
+        return self.player_draw_tile(player, players, is_gang=True)
+
+    # Phase 3: Discard
 
     def player_discard_tile(self, player: Player, idx: int) -> Tile:
-        """Make the player discard the tile at ``idx`` from their hand."""
+        """Make the player discard the tile at `idx` from their hand."""
         return player.discard_tile(idx)
 
     def add_to_discard_pile(self, tile: Tile, player: Player) -> None:
-        """Append the tile to the discard pile and advance to the next player."""
+        """Append the tile to the discard pile, advance to the next player,
+        and increment the turn counter."""
         self.state.add_to_discard_pile(tile)
         self.state.advance_player(player.position)
+        self.state.advance_turn()
 
-    # melds
+    # Phase 4: React (meld claims on discard)
+
     def chi_tile(self, player: Player, tile: Suit) -> Tile:
         """Execute a chi for player on tile and return the automatic discard."""
         self.execute_chi(player, tile)
@@ -64,10 +275,13 @@ class RoundEngine:
         player.pong_tile(tile)
         player.update_tai(tile, self.state.prevalent_wind)
 
-    def gang_tile(self, player: Player, tile: Tile) -> Tile:
-        """Execute a gang for player, draw the replacement tile, and return discard."""
+    def gang_tile(self, player: Player, tile: Tile, players: list[Player]) -> Tile:
+        """
+        Execute a gang (from discard claim) for player, draw the replacement
+        tile from the dead wall, and return the automatic discard.
+        """
         self.execute_gang(player, tile)
-        self.player_draw_tile(player, is_gang=True)
+        self.player_draw_tile(player, players, is_gang=True)
         return self._discard_after_meld(player)
 
     def execute_gang(self, player: Player, tile: Tile) -> None:
@@ -75,7 +289,41 @@ class RoundEngine:
         player.gang_tile(tile)
         player.update_tai(tile, self.state.prevalent_wind)
 
-    # private methods
+    # Phase 4: Special discard-triggered wins
+
+    def check_earthly_hand_discard(
+        self, tile: Tile, non_dealers: list[Player]
+    ) -> Player | None:
+        """
+        After the dealer's first discard, check non-dealers for Earthly Hand.
+        Returns the winning player, or None.
+        """
+        if self.state.turn_count != 0:
+            return None
+        for p in non_dealers:
+            if p.can_hu(tile):
+                return p
+        return None
+
+    def check_humanly_hand(
+        self, tile: Tile, claimant: Player, all_players: list[Player]
+    ) -> bool:
+        """
+        Check if a non-dealer qualifies for Humanly Hand on a discard:
+        - First go-around (within first 4 turns)
+        - Claimant has not yet drawn a tile
+        - No player has any exposed meld
+        """
+        if self.state.turn_count >= 4:
+            return False
+        if claimant.drawn_tile is not None:
+            return False
+        if any(p.open_tile for p in all_players):
+            return False
+        return claimant.can_hu(tile)
+
+    # Private methods
+
     def _discard_after_meld(self, player: Player) -> Tile:
         """After a meld, choose and perform the player's discard."""
         tile_idx = player.pick_tile_to_discard()
@@ -86,9 +334,9 @@ class RoundEngine:
         Replace initial bonus tiles by drawing replacement tiles from the dead wall.
 
         Returns:
-            A tuple ``(replacement_tiles, all_bonus_tiles)`` where
-            ``replacement_tiles`` are non-bonus tiles to add to the player's hand and
-            ``all_bonus_tiles`` is the complete list of bonus tiles collected.
+            A tuple `(replacement_tiles, all_bonus_tiles)` where `replacement_tiles`
+            are non-bonus tiles to add to the player's hand and `all_bonus_tiles` is
+            the complete list of bonus tiles collected.
         """
         if not tiles:
             return [], []

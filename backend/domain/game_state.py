@@ -26,11 +26,15 @@ MAX_PLAYERS = 3
 class GameState:
     """
     Holds the shared mutable state of a game: the wall, the discard pile,
-    the prevalent wind, and whose turn it is.
+    the prevalent wind, whose turn it is, and the turn counter.
 
     Tile drawing is split into two directions:
       - Live wall (front): draw_tile() advances _start_idx forward
       - Dead wall (back): replace_tile() retreats _end_idx backward
+
+    The dead wall is always the last 15 tiles, so the last live tile shifts
+    down as tiles are consumed from the dead wall. The game ends in a draw
+    when `is_live_wall_exhausted` becomes True.
     """
 
     def __init__(
@@ -56,6 +60,7 @@ class GameState:
         self.discarded_tiles: list[Tile] = []
         self.prevalent_wind: WindType = prevalent_wind
         self.current_player = 0
+        self.turn_count = 0
 
         # internals
         self._start_idx = 3 * 16 + 4 + 1
@@ -126,6 +131,26 @@ class GameState:
         self._end_idx -= 1
         return tile
 
+    @property
+    def _last_live_tile_idx(self) -> int:
+        """Index of the last drawable tile from the live wall (16th from the dead wall end)."""
+        return len(self.all_tiles) + self._end_idx - 15
+
+    @property
+    def remaining_live_tiles(self) -> int:
+        """Number of tiles still available in the live wall (never negative)."""
+        return max(0, self._last_live_tile_idx - self._start_idx + 1)
+
+    @property
+    def is_last_live_tile(self) -> bool:
+        """True when the next draw_tile() will pull the last tile of the live wall."""
+        return self.remaining_live_tiles == 1
+
+    @property
+    def is_live_wall_exhausted(self) -> bool:
+        """True when no tiles remain in the live wall — game ends in a draw."""
+        return self.remaining_live_tiles == 0
+
     def add_to_discard_pile(self, tile: Tile) -> None:
         """Append a tile to the discard pile."""
         self.discarded_tiles.append(tile)
@@ -133,6 +158,10 @@ class GameState:
     def advance_player(self, current_position: int) -> None:
         """Advance the turn to the next player in seating order."""
         self.current_player = (current_position + 1) % 4
+
+    def advance_turn(self) -> None:
+        """Increment the turn counter. Called after each discard+reaction completes."""
+        self.turn_count += 1
 
     def get_starting_tile_indices(self, position: int) -> list[int]:
         """Return the wall indices for the starting hand of the given seat position."""
@@ -162,7 +191,7 @@ class GameState:
         """
         Draw (or replace) tiles until a non-bonus tile is returned.
 
-        If a bonus tile is drawn, it is passed to ``collector(tile)`` and a
+        If a bonus tile is drawn, it is passed to `collector(tile)` and a
         replacement tile is drawn from the dead wall.
 
         Args:

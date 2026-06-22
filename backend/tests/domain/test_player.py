@@ -9,6 +9,8 @@ from backend.domain.tiles import (
     Flower,
     FlowerType,
     MeldType,
+    Season,
+    SeasonType,
     Suit,
     SuitType,
     Wind,
@@ -219,13 +221,6 @@ class TestCheckHand:
         assert isinstance(gang, bool)
         assert isinstance(pong, bool)
         assert isinstance(chi, bool)
-
-
-class TestCanHu:
-    def test_always_returns_true(self):
-        p = make_player()
-        assert p.can_hu(Suit(SuitType.DOT, 1)) is True
-        assert p.can_hu(Wind(WindType.DONG)) is True
 
 
 class TestCanGang:
@@ -562,3 +557,240 @@ class TestStrAndRepr:
     def test_repr_contains_position(self):
         p = Player(1)
         assert "position=1" in repr(p)
+
+
+class TestDrawnTileTracking:
+    def test_drawn_tile_set_by_receive_tile(self):
+        p = make_player()
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        assert p.drawn_tile == Suit(SuitType.DOT, 5)
+
+    def test_drawn_tile_none_initially(self):
+        p = make_player()
+        assert p.drawn_tile is None
+
+    def test_drawn_bonus_tiles_set_by_check_bonus_tile(self):
+        p = make_player()
+        p.check_bonus_tile(Flower(FlowerType.PLUM))
+        assert len(p.drawn_bonus_tiles) == 1
+        assert isinstance(p.drawn_bonus_tiles[0], Flower)
+
+    def test_drawn_bonus_tiles_empty_initially(self):
+        p = make_player()
+        assert p.drawn_bonus_tiles == []
+
+    def test_drawn_bonus_tiles_not_set_for_non_bonus(self):
+        p = make_player()
+        result = p.check_bonus_tile(Suit(SuitType.DOT, 1))
+        assert result is False
+        assert p.drawn_bonus_tiles == []
+
+    def test_drawn_bonus_tiles_accumulates_multiple(self):
+        p = make_player()
+        p.check_bonus_tile(Flower(FlowerType.PLUM))
+        p.check_bonus_tile(Flower(FlowerType.ORCHID))
+        assert len(p.drawn_bonus_tiles) == 2
+
+    def test_drawn_state_cleared_on_discard(self):
+        p = make_player()
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        p.check_bonus_tile(Flower(FlowerType.PLUM))
+        assert p.drawn_tile is not None
+        assert len(p.drawn_bonus_tiles) == 1
+        p.discard_tile(0)
+        assert p.drawn_tile is None
+        assert p.drawn_bonus_tiles == []
+
+
+class TestCountFlowerSeasonTiles:
+    def test_counts_only_flowers_and_seasons(self):
+        p = make_player()
+        p.add_bonus_tile([Flower(FlowerType.PLUM)])
+        p.add_bonus_tile([Flower(FlowerType.ORCHID)])
+        p.add_bonus_tile([Season(SeasonType.SPRING)])
+        assert p.count_flower_season_tiles() == 3
+
+    def test_excludes_animals(self):
+        p = make_player()
+        p.add_bonus_tile([Flower(FlowerType.PLUM)])
+        p.add_bonus_tile([Animal(AnimalType.CAT)])
+        assert p.count_flower_season_tiles() == 1
+
+    def test_returns_zero_for_no_bonus(self):
+        p = make_player()
+        assert p.count_flower_season_tiles() == 0
+
+    def test_returns_eight_for_full_set(self):
+        p = make_player()
+        for flower in FlowerType:
+            p.add_bonus_tile([Flower(flower)])
+        for season in SeasonType:
+            p.add_bonus_tile([Season(season)])
+        assert p.count_flower_season_tiles() == 8
+
+
+class TestFindConcealedGangTiles:
+    def test_returns_tile_with_four_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile, tile])
+        result = p.find_concealed_gang_tiles()
+        assert result == [tile]
+
+    def test_returns_multiple_when_multiple(self):
+        p = make_player()
+        t1 = Suit(SuitType.DOT, 5)
+        t2 = Wind(WindType.DONG)
+        p.add_to_hand([t1, t1, t1, t1, t2, t2, t2, t2])
+        result = p.find_concealed_gang_tiles()
+        assert len(result) == 2
+
+    def test_returns_empty_when_no_four_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        assert p.find_concealed_gang_tiles() == []
+
+    def test_returns_empty_when_hand_empty(self):
+        p = make_player()
+        assert p.find_concealed_gang_tiles() == []
+
+
+class TestMakeConcealedGang:
+    def test_consumes_four_tiles_from_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile, tile, Suit(SuitType.DOT, 9)])
+        p.make_concealed_gang(tile)
+        assert tile not in p.hand_tile
+        assert len(p.open_tile) == 1
+        assert len(p.open_tile[0]) == 4
+
+    def test_raises_when_not_four_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        with pytest.raises(InvalidActionError, match="Cannot form concealed gang"):
+            p.make_concealed_gang(tile)
+
+    def test_raises_when_tile_not_in_hand(self):
+        p = make_player()
+        with pytest.raises(InvalidActionError, match="Cannot form concealed gang"):
+            p.make_concealed_gang(Suit(SuitType.DOT, 5))
+
+    def test_sets_hand_count_to_four_after_gang(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile, tile])
+        initial_count = len(p.hand_tile)
+        p.make_concealed_gang(tile)
+        assert len(p.hand_tile) == initial_count - 4
+
+
+class TestFindPongUpgradeTiles:
+    def test_returns_tile_when_hand_matches_open_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [[tile, tile, tile]]
+        p.add_to_hand([tile])
+        result = p.find_pong_upgrade_tiles()
+        assert tile in result
+
+    def test_returns_empty_when_no_open_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile])
+        assert p.find_pong_upgrade_tiles() == []
+
+    def test_returns_empty_when_hand_does_not_match(self):
+        p = make_player()
+        tile_pong = Suit(SuitType.DOT, 5)
+        tile_hand = Suit(SuitType.DOT, 9)
+        p.open_tile = [[tile_pong, tile_pong, tile_pong]]
+        p.add_to_hand([tile_hand])
+        assert p.find_pong_upgrade_tiles() == []
+
+
+class TestMakeExposedGang:
+    def test_upgrades_existing_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [[tile, tile, tile]]
+        p.add_to_hand([tile])
+        p.make_exposed_gang(tile)
+        assert len(p.open_tile[0]) == 4
+
+    def test_removes_hand_tile(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [[tile, tile, tile]]
+        p.add_to_hand([tile, Suit(SuitType.DOT, 9)])
+        p.make_exposed_gang(tile)
+        assert tile not in p.hand_tile
+
+    def test_raises_when_no_open_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile])
+        with pytest.raises(InvalidActionError, match="No open pong to upgrade"):
+            p.make_exposed_gang(tile)
+
+    def test_raises_when_hand_does_not_have_tile(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [[tile, tile, tile]]
+        with pytest.raises(InvalidActionError, match="Cannot form exposed gang"):
+            p.make_exposed_gang(tile)
+
+
+class TestKongCount:
+    def test_zero_with_no_open_tiles(self):
+        p = make_player()
+        assert p.gang_count() == 0
+
+    def test_zero_with_pongs_only(self):
+        p = make_player()
+        p.open_tile = [[Suit(SuitType.DOT, 1)] * 3, [Suit(SuitType.DOT, 2)] * 3]
+        assert p.gang_count() == 0
+
+    def test_counts_4_tile_melds(self):
+        p = make_player()
+        p.open_tile = [
+            [Suit(SuitType.DOT, 1)] * 4,
+            [Suit(SuitType.DOT, 2)] * 4,
+            [Suit(SuitType.DOT, 3)] * 4,
+            [Suit(SuitType.DOT, 4)] * 4,
+        ]
+        assert p.gang_count() == 4
+
+    def test_mixed_counts_only_gangs(self):
+        p = make_player()
+        p.open_tile = [
+            [Suit(SuitType.DOT, 1)] * 4,
+            [Suit(SuitType.DOT, 2)] * 3,
+            [Suit(SuitType.DOT, 3)] * 4,
+        ]
+        assert p.gang_count() == 2
+
+
+class TestHasExposedNonGangMelds:
+    def test_true_with_open_pong(self):
+        p = make_player()
+        p.open_tile = [[Suit(SuitType.DOT, 1)] * 3]
+        assert p.has_exposed_non_gang_melds() is True
+
+    def test_true_with_open_chi(self):
+        p = make_player()
+        p.open_tile = [
+            [Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 3)]
+        ]
+        assert p.has_exposed_non_gang_melds() is True
+
+    def test_false_with_only_gangs(self):
+        p = make_player()
+        p.open_tile = [[Suit(SuitType.DOT, 1)] * 4]
+        assert p.has_exposed_non_gang_melds() is False
+
+    def test_false_with_empty_open_tiles(self):
+        p = make_player()
+        assert p.has_exposed_non_gang_melds() is False

@@ -480,3 +480,79 @@ class TestStrAndRepr:
         state = GameState(2, WindType.DONG, make_wall())
         r = repr(state)
         assert "num_players=2" in r
+
+
+class TestTurnCount:
+    def test_initial_turn_count_zero(self):
+        state = make_state()
+        assert state.turn_count == 0
+
+    def test_advance_turn_increments(self):
+        state = make_state()
+        state.advance_turn()
+        assert state.turn_count == 1
+        state.advance_turn()
+        state.advance_turn()
+        assert state.turn_count == 3
+
+
+class TestWallExhaustion:
+    def make_custom_wall(self, tile_count=60):
+        return [Suit(SuitType.DOT, 1)] * tile_count
+
+    def test_last_live_tile_idx_initial(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        assert state._last_live_tile_idx == 84
+
+    def test_last_live_tile_idx_after_replacements(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        state.replace_tile()
+        state.replace_tile()
+        assert state._last_live_tile_idx == 82
+
+    def test_remaining_live_tiles_initial(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        assert state.remaining_live_tiles == 32
+
+    def test_remaining_live_tiles_after_draw(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        state.draw_tile()
+        assert state.remaining_live_tiles == 31
+
+    def test_remaining_live_tiles_after_replacements(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        state.replace_tile()
+        state.replace_tile()
+        assert state.remaining_live_tiles == 30
+
+    def test_remaining_live_tiles_never_negative(self):
+        wall = self.make_custom_wall(68)
+        state = GameState(0, WindType.DONG, wall)
+        state.draw_tile()
+        assert state.remaining_live_tiles == 0
+
+    def test_is_last_live_tile_true(self):
+        wall = self.make_custom_wall(69)
+        state = GameState(0, WindType.DONG, wall)
+        assert state.is_last_live_tile is True
+
+    def test_is_last_live_tile_false(self):
+        wall = self.make_custom_wall(100)
+        state = GameState(0, WindType.DONG, wall)
+        assert state.is_last_live_tile is False
+
+    def test_is_live_wall_exhausted_false(self):
+        wall = self.make_custom_wall(69)
+        state = GameState(0, WindType.DONG, wall)
+        assert state.is_live_wall_exhausted is False
+
+    def test_is_live_wall_exhausted_true_after_last_draw(self):
+        wall = self.make_custom_wall(69)
+        state = GameState(0, WindType.DONG, wall)
+        state.draw_tile()
+        assert state.is_live_wall_exhausted is True
