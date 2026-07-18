@@ -1,5 +1,5 @@
 from backend.domain.tiles import Suit, SuitType, MeldType, Wind, WindType
-from backend.rules.init import get_invalid_discard_tiles
+from backend.rules.meld_discard_rules import get_invalid_discard_tiles
 
 
 class TestGetInvalidDiscardTiles:

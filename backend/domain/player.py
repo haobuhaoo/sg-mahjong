@@ -14,7 +14,7 @@ from backend.domain.tiles import (
     MeldType,
 )
 from backend.rules.hu import can_hu
-from backend.rules.init import get_invalid_discard_tiles
+from backend.rules.meld_discard_rules import get_invalid_discard_tiles
 from backend.utils.errors import DiscardError, InvalidActionError
 from backend.utils.helper import is_bonus_tile, is_honor_tile, is_suit_tile
 

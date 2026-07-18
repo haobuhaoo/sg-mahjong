@@ -1,4 +1,3 @@
-.github
 *.pdf
 .vscode
 .pytest_cache
