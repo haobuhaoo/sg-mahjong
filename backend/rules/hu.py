@@ -1,7 +1,8 @@
 from collections import Counter
 
 from backend.domain.tiles import Suit, Tile
-from backend.utils.hand_types import (
+from backend.rules.hu_result import HandPattern, HuResult
+from backend.rules.hand_patterns import (
     FOUR_GREAT_BLESSINGS,
     THIRTEEN_WONDERS,
     THREE_GREAT_SCHOLARS,
@@ -9,17 +10,17 @@ from backend.utils.hand_types import (
 from backend.utils.helper import is_suit_tile
 
 
-def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> bool:
+def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> HuResult:
     """
-    Check if player can win with the given tile.
+    Check if player can win with the given tile and classify the hand patterns.
 
     A winning hand requires either:
     1. 4 complete sets + 1 pair from concealed tiles
     2. Thirteen Wonders (13 unique orphans + 1 pair)
     3. Three Great Scholars (3 triplets of all the Dragon tiles;
-        rest of the hand is immaterial)
+         rest of the hand is immaterial)
     4. Four Great Blessings (4 triplets of all the Wind tiles;
-        rest of the hand is immaterial, no pair required)
+         rest of the hand is immaterial, no pair required)
 
     `tile` is the tile just drawn/claimed; it is checked hypothetically and is not
     mutated into `hand_tile`.
@@ -27,34 +28,46 @@ def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> bo
     A Short Hand (fewer tiles than expected) or Long Hand (more tiles than expected)
     forfeits the right to win for the current hand, even if the tiles happen to look
     complete.
+
+    Returns:
+        HuResult with `is_winning=True` and the set of applicable hand patterns if
+        the hand is winning, otherwise `HuResult(False)`.
     """
-    if len(hand_tile) + 3 * len(open_tile) < 13:
-        return False
+    if len(hand_tile) + 3 * len(open_tile) != 13:
+        return HuResult(False)
 
     concealed = hand_tile + [tile]
     sets_needed = 4 - len(open_tile)
 
     if sets_needed < 0:
-        return False
+        return HuResult(False)
+
+    patterns: set[HandPattern] = set()
 
     # Standard winning hand: 4 sets + 1 pair
     if len(concealed) == sets_needed * 3 + 2:
         if _can_form_sets_and_pair(concealed, sets_needed):
-            return True
+            patterns.add(HandPattern.CHICKEN_HAND)
+            if _is_eighteen_arhats(open_tile):
+                patterns.add(HandPattern.EIGHTEEN_ARHATS)
+            if not _has_exposed_pong_chi(open_tile):
+                patterns.add(HandPattern.FULLY_CONCEALED)
 
     # Special case: Thirteen Wonders (only valid with no open melds)
     if not open_tile and _is_thirteen_wonders(concealed):
-        return True
+        patterns.add(HandPattern.THIRTEEN_WONDERS)
 
     # Special case: Three Great Scholars
     if _is_three_great_scholars(concealed, open_tile):
-        return True
+        patterns.add(HandPattern.THREE_GREAT_SCHOLARS)
 
     # Special case: Four Great Blessings
     if _is_four_great_blessings(concealed, open_tile):
-        return True
+        patterns.add(HandPattern.FOUR_GREAT_BLESSINGS)
 
-    return False
+    if patterns:
+        return HuResult(True, frozenset(patterns))
+    return HuResult(False)
 
 
 # Private methods
@@ -69,7 +82,7 @@ def _can_form_sets_and_pair(concealed: list[Tile], sets_needed: int) -> bool:
     pair doesn't consume a meld - the decrementing happens inside
     `_can_decompose` each time it peels off a triplet or run.
     """
-    counter = Counter(t for t in concealed)
+    counter = Counter(concealed)
 
     for tile in list(counter.keys()):
         if counter[tile] >= 2:
@@ -137,6 +150,20 @@ def _can_decompose(counter: Counter, sets_needed: int) -> bool:
     return False
 
 
+def _has_exposed_pong_chi(open_tile: list[list[Tile]]) -> bool:
+    """
+    Return True if the player has any exposed pong or chi meld (length-3 melds).
+
+    A gang formed by claiming another player's discard is also an exposed meld
+    but is not yet distinguishable from a concealed gang in the `open_tile`
+    representation (both are length-4 lists).
+    """
+    # TODO: track per-meld concealment state in `open_tile` so that exposed
+    # gangs (from discard) can be distinguished from concealed gangs. Once that
+    # is done, this check should also return True for exposed gang melds.
+    return any(len(meld) == 3 for meld in open_tile)
+
+
 def _is_thirteen_wonders(tiles: list[Tile]) -> bool:
     """
     Thirteen Wonders:
@@ -147,7 +174,7 @@ def _is_thirteen_wonders(tiles: list[Tile]) -> bool:
     if len(tiles) != 14:
         return False
 
-    counter = Counter(t for t in tiles)
+    counter = Counter(tiles)
     return len(counter) == 13 and all(t in THIRTEEN_WONDERS for t in tiles)
 
 
@@ -165,7 +192,7 @@ def _is_three_great_scholars(
     dragon_tiles.extend(
         [tile for meld in open_tile for tile in meld if tile in THREE_GREAT_SCHOLARS]
     )
-    counter = Counter(t for t in dragon_tiles)
+    counter = Counter(dragon_tiles)
     return len(counter) == 3 and all(c >= 3 for c in counter.values())
 
 
@@ -183,5 +210,14 @@ def _is_four_great_blessings(
     wind_tiles.extend(
         [tile for meld in open_tile for tile in meld if tile in FOUR_GREAT_BLESSINGS]
     )
-    counter = Counter(t for t in wind_tiles)
+    counter = Counter(wind_tiles)
     return len(counter) == 4 and all(c >= 3 for c in counter.values())
+
+
+def _is_eighteen_arhats(open_tile: list[list[Tile]]) -> bool:
+    """
+    Eighteen Arhats:
+
+    Exactly 4 gangs (all open melds length 4).
+    """
+    return len(open_tile) == 4 and all(len(meld) == 4 for meld in open_tile)

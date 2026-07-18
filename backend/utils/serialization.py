@@ -12,16 +12,18 @@ def serialize_player(player: Player) -> dict:
     """
     Serialize a player's state to a JSON-compatible dict.
 
-    Includes hand tiles, open melds, bonus tiles, the most-recently drawn tile and
-    bonus tiles (for frontend visibility), and a breakdown of bonus tile counts by
-    category (animals, flowers, seasons).
+    Includes hand tiles, open melds (grouped per meld), bonus tiles, the
+    most-recently drawn tile and bonus tiles (for frontend visibility), and a
+    breakdown of bonus tile counts by category (animals, flowers, seasons).
     """
     return {
         "position": player.position,
         "seat_wind": player.seat_wind.value,
         "tai": player.tai,
         "hand_tile": [serialize_tile(t) for t in player.hand_tile],
-        "open_tile": [serialize_tile(t) for t in player.get_open_tiles()],
+        "open_tile": [
+            [serialize_tile(t) for t in meld] for meld in player.open_tile
+        ],
         "bonus_tile": [serialize_tile(t) for t in player.bonus_tile],
         "drawn_tile": serialize_tile(player.drawn_tile) if player.drawn_tile else None,
         "drawn_bonus_tiles": [serialize_tile(t) for t in player.drawn_bonus_tiles],

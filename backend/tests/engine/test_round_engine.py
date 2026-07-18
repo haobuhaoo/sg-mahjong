@@ -17,7 +17,13 @@ from backend.domain.tiles import (
     SeasonType,
 )
 from backend.engine.round_engine import RoundEngine
-from backend.engine.turn_result import AssessResult, DrawResult
+from backend.engine.turn_result import (
+    AssessResult,
+    DrawResult,
+    WinEvent,
+    WinSource,
+)
+from backend.rules.hu_result import HandPattern
 from backend.utils.errors import InvalidActionError
 
 
@@ -102,20 +108,22 @@ class TestHeavenlyHand:
             + [Suit(SuitType.DOT, 5)] * 2
         )
         result = engine.check_heavenly_hand(dealer)
-        assert result.is_heavenly_hand is True
+        assert result.win is not None
+        assert WinEvent.HEAVENLY in result.win.events
+        assert result.win.source == WinSource.SELF_PICK
 
     def test_not_heavenly_if_not_dealer(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = Player(1)
         result = engine.check_heavenly_hand(p)
-        assert result.is_heavenly_hand is False
+        assert result.win is None
 
     def test_not_heavenly_if_not_14_tiles(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         dealer = Player(0)
         dealer.add_to_hand([Suit(SuitType.DOT, 1)] * 13)
         result = engine.check_heavenly_hand(dealer)
-        assert result.is_heavenly_hand is False
+        assert result.win is None
 
     def test_not_heavenly_if_no_winning_hand(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -130,7 +138,7 @@ class TestHeavenlyHand:
             + [Suit(SuitType.CHARACTER, 3)] * 2
         )
         result = engine.check_heavenly_hand(dealer)
-        assert result.is_heavenly_hand is False
+        assert result.win is None
 
 
 class TestPlayerDrawTile:
@@ -218,26 +226,26 @@ class TestPlayerDiscardTile:
             engine.player_discard_tile(p, 0)
 
 
-class TestAddToDiscardPile:
+class TestFinalizeDiscard:
     def test_adds_tile_and_advances_player(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        engine.add_to_discard_pile(tile, p)
+        engine.finalize_discard(tile, p)
         assert tile in engine.state.discarded_tiles
         assert engine.state.current_player == 1
 
     def test_advances_player_correctly(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = Player(2)
-        engine.add_to_discard_pile(Suit(SuitType.DOT, 1), p)
+        engine.finalize_discard(Suit(SuitType.DOT, 1), p)
         assert engine.state.current_player == 3
 
     def test_increments_turn_count(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         assert engine.state.turn_count == 0
-        engine.add_to_discard_pile(Suit(SuitType.DOT, 1), p)
+        engine.finalize_discard(Suit(SuitType.DOT, 1), p)
         assert engine.state.turn_count == 1
 
 
@@ -254,20 +262,20 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.can_self_pick is True
+        assert result.win is not None
 
     def test_no_self_pick_when_hand_incomplete(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.can_self_pick is False
+        assert result.win is None
 
     def test_no_self_pick_when_no_drawn_tile(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         result = engine.player_assess_hand(p)
-        assert result.can_self_pick is False
+        assert result.win is None
 
     def test_finds_concealed_gang_tiles(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -275,7 +283,7 @@ class TestPlayerAssessHand:
         tile = Suit(SuitType.DOT, 5)
         p.add_to_hand([tile, tile, tile, tile])
         result = engine.player_assess_hand(p)
-        assert tile in result.concealed_gang_tiles
+        assert tile in result.actions.concealed_gang_tiles
 
     def test_finds_pong_upgrade_tiles(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -284,7 +292,7 @@ class TestPlayerAssessHand:
         p.open_tile = [[tile, tile, tile]]
         p.add_to_hand([tile])
         result = engine.player_assess_hand(p)
-        assert tile in result.pong_upgrade_tiles
+        assert tile in result.actions.pong_upgrade_tiles
 
     def test_has_flower_win_with_eight_flowers_seasons(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -294,7 +302,7 @@ class TestPlayerAssessHand:
         for season in SeasonType:
             p.add_bonus_tile([Season(season)])
         result = engine.player_assess_hand(p)
-        assert result.has_flower_win is True
+        assert result.flower_win is True
 
     def test_no_flower_win_with_seven(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -304,7 +312,7 @@ class TestPlayerAssessHand:
         for season in [SeasonType.SPRING, SeasonType.SUMMER, SeasonType.AUTUMN]:
             p.add_bonus_tile([Season(season)])
         result = engine.player_assess_hand(p)
-        assert result.has_flower_win is False
+        assert result.flower_win is False
 
     def test_win_on_replacement(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -318,7 +326,8 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p, is_replacement=True)
-        assert result.win_on_replacement is True
+        assert result.win is not None
+        assert WinEvent.REPLACEMENT_TILE in result.win.events
 
     def test_win_on_last_tile(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -332,7 +341,8 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p, is_last_tile=True)
-        assert result.win_on_last_tile is True
+        assert result.win is not None
+        assert WinEvent.LAST_TILE in result.win.events
 
     def test_no_win_on_last_tile_if_replacement(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -346,7 +356,8 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p, is_last_tile=True, is_replacement=True)
-        assert result.win_on_last_tile is False
+        assert result.win is not None
+        assert WinEvent.LAST_TILE not in result.win.events
 
     def test_is_earthly_hand(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -360,7 +371,8 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p, is_first_draw=True)
-        assert result.is_earthly_hand is True
+        assert result.win is not None
+        assert WinEvent.EARTHLY in result.win.events
 
     def test_not_earthly_if_dealer(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -374,7 +386,8 @@ class TestPlayerAssessHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p, is_first_draw=True)
-        assert result.is_earthly_hand is False
+        assert result.win is not None
+        assert WinEvent.EARTHLY not in result.win.events
 
     def test_any_win_aggregates_all_wins(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -487,6 +500,11 @@ class TestDeclareExposedGang:
         result = engine.declare_exposed_gang(p, tile, players)
         assert isinstance(result, AssessResult)
         assert result.robbing_gang_by == 1
+        assert result.win is not None
+        assert result.win.winner == 1
+        assert result.win.source == WinSource.DISCARD
+        assert WinEvent.ROBBING_GANG in result.win.events
+        assert len(p.open_tile[0]) == 3
 
     def test_not_robbed_if_no_can_hu(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -551,6 +569,26 @@ class TestRobbingTheEighth:
         result = engine.player_draw_tile(drawer, players)
         assert result.robbed_by is None
 
+    def test_animal_draw_not_robbed(self):
+        wall = (
+            [Suit(SuitType.DOT, 1)] * 53
+            + [Animal(AnimalType.CAT)]
+            + [Suit(SuitType.DOT, 1)] * 50
+        )
+        state = GameState(0, WindType.DONG, wall)
+        engine = RoundEngine(state)
+        robber = Player(1)
+        for flower in FlowerType:
+            robber.add_bonus_tile([Flower(flower)])
+        for season in [SeasonType.SPRING, SeasonType.SUMMER, SeasonType.AUTUMN]:
+            robber.add_bonus_tile([Season(season)])
+        drawer = make_player()
+        players = [drawer, robber]
+        result = engine.player_draw_tile(drawer, players)
+        assert result.robbed_by is None
+        assert Animal(AnimalType.CAT) in drawer.bonus_tile
+        assert result.drawn_tile == Suit(SuitType.DOT, 1)
+
     def test_drawn_bonus_tiles_populated_when_robbed(self):
         wall = (
             [Suit(SuitType.DOT, 1)] * 53
@@ -572,7 +610,7 @@ class TestRobbingTheEighth:
 
 
 class TestEarthlyHandDiscard:
-    def test_returns_winner_on_first_discard(self):
+    def test_returns_win_on_first_discard(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         non_dealer = Player(1)
         tile = Suit(SuitType.DOT, 5)
@@ -583,8 +621,10 @@ class TestEarthlyHandDiscard:
             + [Suit(SuitType.DOT, 4)] * 3
             + [Suit(SuitType.DOT, 5)]
         )
-        winner = engine.check_earthly_hand_discard(tile, [non_dealer])
-        assert winner is non_dealer
+        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        assert result.win is not None
+        assert WinEvent.EARTHLY in result.win.events
+        assert result.win.source == WinSource.DISCARD
 
     def test_returns_none_after_first_turn(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -597,15 +637,15 @@ class TestEarthlyHandDiscard:
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
         )
-        winner = engine.check_earthly_hand_discard(tile, [non_dealer])
-        assert winner is None
+        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        assert result.win is None
 
     def test_returns_none_if_cannot_hu(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         non_dealer = Player(1)
         tile = Suit(SuitType.DOT, 5)
-        winner = engine.check_earthly_hand_discard(tile, [non_dealer])
-        assert winner is None
+        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        assert result.win is None
 
 
 class TestHumanlyHand:
@@ -621,7 +661,9 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant, Player(2), Player(3)]
-        assert engine.check_humanly_hand(tile, claimant, players) is True
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is not None
+        assert WinEvent.HUMANLY in result.win.events
 
     def test_fails_after_first_go_around(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -636,7 +678,8 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 4)] * 3
         )
         players = [Player(0), claimant]
-        assert engine.check_humanly_hand(tile, claimant, players) is False
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is None
 
     def test_fails_if_already_drew(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -650,7 +693,8 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 4)] * 3
         )
         players = [Player(0), claimant]
-        assert engine.check_humanly_hand(tile, claimant, players) is False
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is None
 
     def test_fails_with_exposed_meld(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -665,14 +709,16 @@ class TestHumanlyHand:
         exposed_player = Player(2)
         exposed_player.add_open_tile([Suit(SuitType.DOT, 7)])
         players = [Player(0), claimant, exposed_player]
-        assert engine.check_humanly_hand(tile, claimant, players) is False
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is None
 
     def test_fails_if_cannot_hu(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         claimant = Player(1)
         tile = Suit(SuitType.DOT, 5)
         players = [Player(0), claimant]
-        assert engine.check_humanly_hand(tile, claimant, players) is False
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is None
 
 
 class TestChiTile:
@@ -864,7 +910,8 @@ class TestEighteenArhats:
         p.add_to_hand([Suit(SuitType.DOT, 5)])
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_eighteen_arhats is True
+        assert result.win is not None
+        assert HandPattern.EIGHTEEN_ARHATS in result.win.hu.patterns
 
     def test_not_eighteen_arhats_with_3_gangs(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -874,16 +921,11 @@ class TestEighteenArhats:
             [Suit(SuitType.DOT, 2)] * 4,
             [Suit(SuitType.DOT, 3)] * 4,
         ]
-        p.add_to_hand(
-            [Suit(SuitType.DOT, 5)] * 2
-            + [Suit(SuitType.DOT, 4)] * 3
-            + [Suit(SuitType.DOT, 6)] * 3
-            + [Suit(SuitType.DOT, 7)] * 3
-            + [Suit(SuitType.DOT, 8)] * 3
-        )
+        p.add_to_hand([Suit(SuitType.DOT, 4)] * 3 + [Suit(SuitType.DOT, 5)])
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_eighteen_arhats is False
+        assert result.win is not None
+        assert HandPattern.EIGHTEEN_ARHATS not in result.win.hu.patterns
 
     def test_not_eighteen_arhats_if_cannot_self_pick(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -896,7 +938,7 @@ class TestEighteenArhats:
         ]
         p.receive_tile(Suit(SuitType.DOT, 9))
         result = engine.player_assess_hand(p)
-        assert result.is_eighteen_arhats is False
+        assert result.win is None
 
 
 class TestFullyConcealedHand:
@@ -912,7 +954,8 @@ class TestFullyConcealedHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_fully_concealed is True
+        assert result.win is not None
+        assert HandPattern.FULLY_CONCEALED in result.win.hu.patterns
 
     def test_fully_concealed_with_concealed_gang_allowed(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -926,7 +969,8 @@ class TestFullyConcealedHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_fully_concealed is True
+        assert result.win is not None
+        assert HandPattern.FULLY_CONCEALED in result.win.hu.patterns
 
     def test_not_fully_concealed_with_exposed_pong(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -940,14 +984,15 @@ class TestFullyConcealedHand:
         )
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_fully_concealed is False
+        assert result.win is not None
+        assert HandPattern.FULLY_CONCEALED not in result.win.hu.patterns
 
     def test_not_fully_concealed_if_cannot_self_pick(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         p.receive_tile(Suit(SuitType.DOT, 5))
         result = engine.player_assess_hand(p)
-        assert result.is_fully_concealed is False
+        assert result.win is None
 
 
 class TestRobbingConcealedGang:
@@ -969,6 +1014,10 @@ class TestRobbingConcealedGang:
         result = engine.declare_concealed_gang(p, tile, players)
         assert isinstance(result, AssessResult)
         assert result.robbing_gang_by == 1
+        assert result.win is not None
+        assert result.win.winner == 1
+        assert HandPattern.THIRTEEN_WONDERS in result.win.hu.patterns
+        assert WinEvent.ROBBING_GANG in result.win.events
 
     def test_not_robbed_when_not_thirteen_wonders(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)

@@ -305,21 +305,26 @@ class TestAnimal:
         r = repr(a)
         assert "Animal" in r
 
-    def test_eq_all_animals_equal(self):
-        assert Animal(AnimalType.CAT) == Animal(AnimalType.RAT)
-        assert Animal(AnimalType.CAT) == Animal(AnimalType.CHICKEN)
+    def test_eq_same_animal(self):
+        assert Animal(AnimalType.CAT) == Animal(AnimalType.CAT)
+
+    def test_eq_different_animals(self):
+        assert Animal(AnimalType.CAT) != Animal(AnimalType.RAT)
+        assert Animal(AnimalType.CAT) != Animal(AnimalType.CHICKEN)
 
     def test_eq_different_type(self):
         assert Animal(AnimalType.CAT) != Flower(FlowerType.PLUM)
         assert Animal(AnimalType.CAT) != Season(SeasonType.SPRING)
 
-    def test_hash_all_animals_same(self):
-        assert hash(Animal(AnimalType.CAT)) == hash(Animal(AnimalType.RAT))
-        assert hash(Animal(AnimalType.CAT)) == hash(Animal(AnimalType.CHICKEN))
+    def test_hash_same_animal(self):
+        assert hash(Animal(AnimalType.CAT)) == hash(Animal(AnimalType.CAT))
 
-    def test_set_membership_all_animals_same(self):
-        s = {Animal(AnimalType.CAT), Animal(AnimalType.RAT)}
-        assert len(s) == 1
+    def test_hash_different_animals(self):
+        assert hash(Animal(AnimalType.CAT)) != hash(Animal(AnimalType.RAT))
+
+    def test_set_membership(self):
+        s = {Animal(AnimalType.CAT), Animal(AnimalType.RAT), Animal(AnimalType.CAT)}
+        assert len(s) == 2
 
     def test_get_ordering(self):
         assert Animal(AnimalType.CAT).get_ordering() == -1
@@ -359,21 +364,26 @@ class TestFlower:
         r = repr(f)
         assert "Flower" in r
 
-    def test_eq_all_flowers_equal(self):
-        assert Flower(FlowerType.PLUM) == Flower(FlowerType.ORCHID)
-        assert Flower(FlowerType.PLUM) == Flower(FlowerType.BAMBOO)
+    def test_eq_same_flower(self):
+        assert Flower(FlowerType.PLUM) == Flower(FlowerType.PLUM)
+
+    def test_eq_different_flowers(self):
+        assert Flower(FlowerType.PLUM) != Flower(FlowerType.ORCHID)
+        assert Flower(FlowerType.PLUM) != Flower(FlowerType.BAMBOO)
 
     def test_eq_different_type(self):
         assert Flower(FlowerType.PLUM) != Animal(AnimalType.CAT)
         assert Flower(FlowerType.PLUM) != Season(SeasonType.SPRING)
 
-    def test_hash_all_flowers_same(self):
-        assert hash(Flower(FlowerType.PLUM)) == hash(Flower(FlowerType.ORCHID))
-        assert hash(Flower(FlowerType.PLUM)) == hash(Flower(FlowerType.BAMBOO))
+    def test_hash_same_flower(self):
+        assert hash(Flower(FlowerType.PLUM)) == hash(Flower(FlowerType.PLUM))
 
-    def test_set_membership_all_flowers_same(self):
-        s = {Flower(FlowerType.PLUM), Flower(FlowerType.ORCHID)}
-        assert len(s) == 1
+    def test_hash_different_flowers(self):
+        assert hash(Flower(FlowerType.PLUM)) != hash(Flower(FlowerType.ORCHID))
+
+    def test_set_membership(self):
+        s = {Flower(FlowerType.PLUM), Flower(FlowerType.ORCHID), Flower(FlowerType.PLUM)}
+        assert len(s) == 2
 
     def test_get_ordering(self):
         assert Flower(FlowerType.PLUM).get_ordering() == 0
@@ -413,21 +423,26 @@ class TestSeason:
         r = repr(s)
         assert "Season" in r
 
-    def test_eq_all_seasons_equal(self):
-        assert Season(SeasonType.SPRING) == Season(SeasonType.SUMMER)
-        assert Season(SeasonType.SPRING) == Season(SeasonType.WINTER)
+    def test_eq_same_season(self):
+        assert Season(SeasonType.SPRING) == Season(SeasonType.SPRING)
+
+    def test_eq_different_seasons(self):
+        assert Season(SeasonType.SPRING) != Season(SeasonType.SUMMER)
+        assert Season(SeasonType.SPRING) != Season(SeasonType.WINTER)
 
     def test_eq_different_type(self):
         assert Season(SeasonType.SPRING) != Animal(AnimalType.CAT)
         assert Season(SeasonType.SPRING) != Flower(FlowerType.PLUM)
 
-    def test_hash_all_seasons_same(self):
-        assert hash(Season(SeasonType.SPRING)) == hash(Season(SeasonType.SUMMER))
-        assert hash(Season(SeasonType.SPRING)) == hash(Season(SeasonType.WINTER))
+    def test_hash_same_season(self):
+        assert hash(Season(SeasonType.SPRING)) == hash(Season(SeasonType.SPRING))
 
-    def test_set_membership_all_seasons_same(self):
-        s = {Season(SeasonType.SPRING), Season(SeasonType.SUMMER)}
-        assert len(s) == 1
+    def test_hash_different_seasons(self):
+        assert hash(Season(SeasonType.SPRING)) != hash(Season(SeasonType.SUMMER))
+
+    def test_set_membership(self):
+        s = {Season(SeasonType.SPRING), Season(SeasonType.SUMMER), Season(SeasonType.SPRING)}
+        assert len(s) == 2
 
     def test_get_ordering(self):
         assert Season(SeasonType.SPRING).get_ordering() == 0

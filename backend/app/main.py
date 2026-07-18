@@ -46,42 +46,45 @@ def main():
         # print(player_1.open_tile)
         # return
 
-        for _ in range(5):
-            for idx, p in enumerate(plist):
-                tile_idx = p.pick_tile_to_discard()
-                thrown_tile = round_manager.player_discard_tile(p, tile_idx)
-                for other in plist:
-                    if other == p:
-                        continue
-                    hu, gang, pong, chi = other.check_hand(idx, thrown_tile)
-                    if gang or pong:
-                        print(f"{"gang " if gang else "pong "}" + thrown_tile.__str__())
-                        # print(thrown_tile)
-                        thrown_tile = (
-                            round_manager.gang_tile(other, thrown_tile)
-                            if gang
-                            else round_manager.pong_tile(other, thrown_tile)
-                        )
-                        round_manager.add_to_discard_pile(thrown_tile, other)
-                        print(other)
-                        print("---")
-                        print(game_table)
-                        print("\n")
-                        break
-                        # return
-                    elif chi:
-                        print("chi " + thrown_tile.__str__())
-                        # print(thrown_tile)
-                        thrown_tile = round_manager.chi_tile(other, thrown_tile)
-                        round_manager.add_to_discard_pile(thrown_tile, other)
-                        print(other)
-                        print("---")
-                        print(game_table)
-                        print("\n")
-                        break
-                        # return
-                round_manager.add_to_discard_pile(thrown_tile, p)
-                round_manager.player_draw_tile(plist[(idx + 1) % 4])
+        skip_draw = True
+        for _ in range(20):
+            p = plist[game_table.current_player]
+            if not skip_draw:
+                round_manager.player_draw_tile(p, plist)
+            skip_draw = False
+            tile_idx = p.pick_tile_to_discard()
+            thrown_tile = round_manager.player_discard_tile(p, tile_idx)
+            claimed = False
+            for other in plist:
+                if other is p:
+                    continue
+                hu, gang, pong, chi = other.check_hand(p.position, thrown_tile)
+                if gang or pong:
+                    print(f"{"gang " if gang else "pong "}" + thrown_tile.__str__())
+                    thrown_tile = (
+                        round_manager.gang_tile(other, thrown_tile, plist)
+                        if gang
+                        else round_manager.pong_tile(other, thrown_tile)
+                    )
+                    round_manager.finalize_discard(thrown_tile, other)
+                    claimed = True
+                    print(other)
+                    print("---")
+                    print(game_table)
+                    print("\n")
+                    break
+                elif chi:
+                    print("chi " + thrown_tile.__str__())
+                    thrown_tile = round_manager.chi_tile(other, thrown_tile)
+                    round_manager.finalize_discard(thrown_tile, other)
+                    claimed = True
+                    print(other)
+                    print("---")
+                    print(game_table)
+                    print("\n")
+                    break
+            if not claimed:
+                round_manager.finalize_discard(thrown_tile, p)
         print(game_table)
         # print(player_1)
     except Exception as err:

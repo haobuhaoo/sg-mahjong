@@ -20,8 +20,6 @@ from backend.domain.tiles import (
 )
 from backend.utils.helper import is_bonus_tile
 
-MAX_PLAYERS = 3
-
 
 class GameState:
     """
@@ -36,6 +34,12 @@ class GameState:
     down as tiles are consumed from the dead wall. The game ends in a draw
     when `is_live_wall_exhausted` becomes True.
     """
+
+    MAX_PLAYERS = 3
+    NUM_SEATS = 4
+    TILES_PER_HAND = 13
+    TILES_PER_BATCH = 4
+    DEAD_WALL_SIZE = 15
 
     def __init__(
         self, num_players: int, prevalent_wind: WindType, all_tiles: list[Tile]
@@ -53,8 +57,10 @@ class GameState:
         Raises:
             IndexError: If num_players is not in [0, 3]
         """
-        if num_players < 0 or num_players > MAX_PLAYERS:
-            raise IndexError("Number of players must be between 0 and 3")
+        if num_players < 0 or num_players > GameState.MAX_PLAYERS:
+            raise IndexError(
+                f"Number of players must be between 0 and {GameState.MAX_PLAYERS}"
+            )
         self.num_players = num_players
         self.all_tiles: list[Tile] = all_tiles
         self.discarded_tiles: list[Tile] = []
@@ -63,7 +69,7 @@ class GameState:
         self.turn_count = 0
 
         # internals
-        self._start_idx = 3 * 16 + 4 + 1
+        self._start_idx = GameState.NUM_SEATS * GameState.TILES_PER_HAND + 1
         self._end_idx = -1
 
     def __str__(self):
@@ -134,7 +140,7 @@ class GameState:
     @property
     def _last_live_tile_idx(self) -> int:
         """Index of the last drawable tile from the live wall (16th from the dead wall end)."""
-        return len(self.all_tiles) + self._end_idx - 15
+        return len(self.all_tiles) + self._end_idx - GameState.DEAD_WALL_SIZE
 
     @property
     def remaining_live_tiles(self) -> int:
@@ -157,7 +163,7 @@ class GameState:
 
     def advance_player(self, current_position: int) -> None:
         """Advance the turn to the next player in seating order."""
-        self.current_player = (current_position + 1) % 4
+        self.current_player = (current_position + 1) % GameState.NUM_SEATS
 
     def advance_turn(self) -> None:
         """Increment the turn counter. Called after each discard+reaction completes."""
@@ -165,10 +171,15 @@ class GameState:
 
     def get_starting_tile_indices(self, position: int) -> list[int]:
         """Return the wall indices for the starting hand of the given seat position."""
-        indices = [position * 4 + i * 16 + j for i in range(3) for j in range(4)]
-        indices.append(3 * 16 + position)
+        batch_stride = GameState.NUM_SEATS * GameState.TILES_PER_BATCH
+        indices = [
+            position * GameState.TILES_PER_BATCH + i * batch_stride + j
+            for i in range(3)
+            for j in range(GameState.TILES_PER_BATCH)
+        ]
+        indices.append(3 * batch_stride + position)
         if position == 0:
-            indices.append(3 * 16 + 4)
+            indices.append(3 * batch_stride + GameState.NUM_SEATS)
         return indices
 
     def split_starting_tiles(

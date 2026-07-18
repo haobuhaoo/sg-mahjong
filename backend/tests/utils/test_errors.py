@@ -1,5 +1,3 @@
-import pytest
-
 from backend.domain.tiles import Suit, SuitType, MeldType
 from backend.utils.errors import DiscardError, InvalidActionError
 

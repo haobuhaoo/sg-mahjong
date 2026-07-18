@@ -1,8 +1,16 @@
 from backend.domain.game_state import GameState
 from backend.domain.player import Player
-from backend.domain.tiles import Suit, Tile
-from backend.engine.turn_result import AssessResult, DrawResult
-from backend.rules.hu import can_hu, _is_thirteen_wonders
+from backend.domain.tiles import Flower, Season, Suit, Tile
+from backend.engine.turn_result import (
+    AssessResult,
+    DrawResult,
+    TurnActions,
+    WinEvent,
+    WinResult,
+    WinSource,
+)
+from backend.rules.hu import can_hu
+from backend.rules.hu_result import HandPattern
 from backend.utils.errors import InvalidActionError
 from backend.utils.helper import is_bonus_tile
 
@@ -24,6 +32,7 @@ class RoundEngine:
     """
 
     def __init__(self, state: GameState):
+        """Create a round engine that operates on the given game state."""
         self.state = state
 
     # Setup
@@ -49,8 +58,21 @@ class RoundEngine:
         for i in range(len(player.hand_tile)):
             tile = player.hand_tile[i]
             remaining = player.hand_tile[:i] + player.hand_tile[i + 1 :]
-            if can_hu(remaining, player.open_tile, tile):
-                return AssessResult(is_heavenly_hand=True)
+            hu_result = can_hu(remaining, player.open_tile, tile)
+            if hu_result.is_winning:
+                return AssessResult(
+                    win=WinResult(
+                        hu=hu_result,
+                        source=WinSource.SELF_PICK,
+                        winning_tile=tile,
+                        winner=player.position,
+                        events=frozenset({WinEvent.HEAVENLY}),
+                    ),
+                    actions=TurnActions(
+                        concealed_gang_tiles=player.find_concealed_gang_tiles(),
+                        pong_upgrade_tiles=player.find_pong_upgrade_tiles(),
+                    ),
+                )
         return AssessResult()
 
     # Phase 1: Draw
@@ -87,8 +109,9 @@ class RoundEngine:
             Robbing the Eighth before the drawing player collects the tile.
 
             For each bonus tile drawn:
-            1. If any other player already has 7 Flower+Season tiles, the tile
-               is robbed — `robbed` is set and the loop stops.
+            1. If the tile is a Flower or Season and any other player already
+               has 7 Flower+Season tiles, the tile is robbed — `robbed` is set
+               and the loop stops. Animals are never robbed.
             2. Otherwise, the tile is collected normally by the drawing player
                via `player.check_bonus_tile` and `had_bonus` is flagged.
 
@@ -99,10 +122,11 @@ class RoundEngine:
             nonlocal had_bonus, robbed
             if not is_bonus_tile(tile):
                 return False
-            for p in players:
-                if p is not player and p.count_flower_season_tiles() == 7:
-                    robbed = p
-                    return False
+            if isinstance(tile, (Flower, Season)):
+                for p in players:
+                    if p is not player and p.count_flower_season_tiles() == 7:
+                        robbed = p
+                        return False
             had_bonus = True
             return player.check_bonus_tile(tile)
 
@@ -152,25 +176,39 @@ class RoundEngine:
             is_last_tile: The draw consumed the last live wall tile.
             is_first_draw: This is the player's first draw of the game.
         """
-        can_sp = False
-        tile = player.drawn_tile
-        if tile is not None:
-            hand_without_tile = list(player.hand_tile)
-            if tile in hand_without_tile:
-                hand_without_tile.remove(tile)
-            can_sp = bool(can_hu(hand_without_tile, player.open_tile, tile))
-
-        return AssessResult(
-            can_self_pick=can_sp,
+        actions = TurnActions(
             concealed_gang_tiles=player.find_concealed_gang_tiles(),
             pong_upgrade_tiles=player.find_pong_upgrade_tiles(),
-            has_flower_win=player.count_flower_season_tiles() == 8,
-            win_on_replacement=can_sp and is_replacement,
-            win_on_last_tile=can_sp and is_last_tile and not is_replacement,
-            is_earthly_hand=can_sp and is_first_draw and player.position != 0,
-            is_eighteen_arhats=can_sp and player.gang_count() == 4,
-            is_fully_concealed=(can_sp and not player.has_exposed_non_gang_melds()),
         )
+
+        if player.count_flower_season_tiles() == 8:
+            return AssessResult(flower_win=True, actions=actions)
+
+        tile = player.drawn_tile
+        if tile is not None:
+            hu_result = can_hu(
+                self._hand_without_drawn_tile(player), player.open_tile, tile
+            )
+            if hu_result.is_winning:
+                events: set[WinEvent] = set()
+                if is_replacement:
+                    events.add(WinEvent.REPLACEMENT_TILE)
+                if is_last_tile and not is_replacement:
+                    events.add(WinEvent.LAST_TILE)
+                if is_first_draw and player.position != 0:
+                    events.add(WinEvent.EARTHLY)
+                return AssessResult(
+                    win=WinResult(
+                        hu=hu_result,
+                        source=WinSource.SELF_PICK,
+                        winning_tile=tile,
+                        winner=player.position,
+                        events=frozenset(events),
+                    ),
+                    actions=actions,
+                )
+
+        return AssessResult(actions=actions)
 
     # Phase 2a: Self-pick win
 
@@ -188,10 +226,8 @@ class RoundEngine:
             raise InvalidActionError(
                 "No drawn tile to self-pick with", "self-pick", tile
             )
-        hand_without_tile = list(player.hand_tile)
-        if tile in hand_without_tile:
-            hand_without_tile.remove(tile)
-        if not can_hu(hand_without_tile, player.open_tile, tile):
+        hand_without_tile = self._hand_without_drawn_tile(player)
+        if not can_hu(hand_without_tile, player.open_tile, tile).is_winning:
             raise InvalidActionError(f"Cannot self-pick with {tile}", "self-pick", tile)
         return tile
 
@@ -211,10 +247,22 @@ class RoundEngine:
         Caller should re-run assess after this (the replacement could win).
         """
         for p in players:
-            if p is not player and p.can_hu(tile):
-                hand_with_tile = p.hand_tile + [tile]
-                if _is_thirteen_wonders(hand_with_tile):
-                    return AssessResult(robbing_gang_by=p.position)
+            if p is not player:
+                hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+                if (
+                    hu_result.is_winning
+                    and HandPattern.THIRTEEN_WONDERS in hu_result.patterns
+                ):
+                    return AssessResult(
+                        robbing_gang_by=p.position,
+                        win=WinResult(
+                            hu=hu_result,
+                            source=WinSource.DISCARD,
+                            winning_tile=tile,
+                            winner=p.position,
+                            events=frozenset({WinEvent.ROBBING_GANG}),
+                        ),
+                    )
 
         player.make_concealed_gang(tile)
         player.update_tai(tile, self.state.prevalent_wind)
@@ -234,8 +282,19 @@ class RoundEngine:
         Caller should re-run assess after this.
         """
         for p in players:
-            if p is not player and p.can_hu(tile):
-                return AssessResult(robbing_gang_by=p.position)
+            if p is not player:
+                hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+                if hu_result.is_winning:
+                    return AssessResult(
+                        robbing_gang_by=p.position,
+                        win=WinResult(
+                            hu=hu_result,
+                            source=WinSource.DISCARD,
+                            winning_tile=tile,
+                            winner=p.position,
+                            events=frozenset({WinEvent.ROBBING_GANG}),
+                        ),
+                    )
 
         player.make_exposed_gang(tile)
         player.update_tai(tile, self.state.prevalent_wind)
@@ -247,7 +306,7 @@ class RoundEngine:
         """Make the player discard the tile at `idx` from their hand."""
         return player.discard_tile(idx)
 
-    def add_to_discard_pile(self, tile: Tile, player: Player) -> None:
+    def finalize_discard(self, tile: Tile, player: Player) -> None:
         """Append the tile to the discard pile, advance to the next player,
         and increment the turn counter."""
         self.state.add_to_discard_pile(tile)
@@ -293,36 +352,68 @@ class RoundEngine:
 
     def check_earthly_hand_discard(
         self, tile: Tile, non_dealers: list[Player]
-    ) -> Player | None:
+    ) -> AssessResult:
         """
         After the dealer's first discard, check non-dealers for Earthly Hand.
-        Returns the winning player, or None.
+
+        Returns an AssessResult with the win if a non-dealer qualifies,
+        or an empty AssessResult.
         """
         if self.state.turn_count != 0:
-            return None
+            return AssessResult()
         for p in non_dealers:
-            if p.can_hu(tile):
-                return p
-        return None
+            hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+            if hu_result.is_winning:
+                return AssessResult(
+                    win=WinResult(
+                        hu=hu_result,
+                        source=WinSource.DISCARD,
+                        winning_tile=tile,
+                        winner=p.position,
+                        events=frozenset({WinEvent.EARTHLY}),
+                    )
+                )
+        return AssessResult()
 
     def check_humanly_hand(
         self, tile: Tile, claimant: Player, all_players: list[Player]
-    ) -> bool:
+    ) -> AssessResult:
         """
         Check if a non-dealer qualifies for Humanly Hand on a discard:
         - First go-around (within first 4 turns)
         - Claimant has not yet drawn a tile
         - No player has any exposed meld
+
+        Returns an AssessResult with the win if the claimant qualifies,
+        or an empty AssessResult.
         """
         if self.state.turn_count >= 4:
-            return False
+            return AssessResult()
         if claimant.drawn_tile is not None:
-            return False
+            return AssessResult()
         if any(p.open_tile for p in all_players):
-            return False
-        return claimant.can_hu(tile)
+            return AssessResult()
+        hu_result = can_hu(claimant.hand_tile, claimant.open_tile, tile)
+        if hu_result.is_winning:
+            return AssessResult(
+                win=WinResult(
+                    hu=hu_result,
+                    source=WinSource.DISCARD,
+                    winning_tile=tile,
+                    winner=claimant.position,
+                    events=frozenset({WinEvent.HUMANLY}),
+                )
+            )
+        return AssessResult()
 
     # Private methods
+
+    def _hand_without_drawn_tile(self, player: Player) -> list[Tile]:
+        """Return a copy of the player's hand with the drawn tile removed."""
+        hand_without_tile = list(player.hand_tile)
+        if player.drawn_tile in hand_without_tile:
+            hand_without_tile.remove(player.drawn_tile)
+        return hand_without_tile
 
     def _discard_after_meld(self, player: Player) -> Tile:
         """After a meld, choose and perform the player's discard."""

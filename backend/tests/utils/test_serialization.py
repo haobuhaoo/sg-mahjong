@@ -98,12 +98,13 @@ class TestSerializePlayer:
         assert len(result["hand_tile"]) == 2
         assert result["hand_tile"][0]["type"] == "Suit"
 
-    def test_open_tiles_serialized(self):
+    def test_open_tiles_serialized_as_melds(self):
         p = Player(0)
-        p.add_open_tile([Suit(SuitType.DOT, 1)])
+        p.add_open_tile([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 3)])
         result = serialize_player(p)
         assert len(result["open_tile"]) == 1
-        assert result["open_tile"][0]["type"] == "Suit"
+        assert len(result["open_tile"][0]) == 3
+        assert result["open_tile"][0][0]["type"] == "Suit"
 
     def test_bonus_tiles_serialized(self):
         p = Player(0)

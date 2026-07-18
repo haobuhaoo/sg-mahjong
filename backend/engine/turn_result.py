@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
+from enum import Enum, auto
 
 from backend.domain.tiles import Tile
+from backend.rules.hu_result import HuResult
 
 
 @dataclass
@@ -27,66 +29,97 @@ class DrawResult:
     is_last_tile: bool = False
 
 
+class WinSource(Enum):
+    """How the winning tile entered play."""
+
+    SELF_PICK = auto()
+    DISCARD = auto()
+
+
+class WinEvent(Enum):
+    """Game-context circumstances that add scoring bonuses on top of hand patterns."""
+
+    HEAVENLY = auto()
+    EARTHLY = auto()
+    HUMANLY = auto()
+    REPLACEMENT_TILE = auto()
+    LAST_TILE = auto()
+    ROBBING_GANG = auto()
+
+
+@dataclass
+class WinResult:
+    """
+    Describes a winning outcome during a player's assess or react phase.
+
+    Attributes:
+        hu: The tile-level hand-pattern analysis result.
+        source: How the winning tile was acquired.
+        winning_tile: The tile that completes the winning hand.
+        winner: Seat position of the winning player.
+        events: Bonus-scoring game-context circumstances.
+    """
+
+    hu: HuResult
+    source: WinSource
+    winning_tile: Tile
+    winner: int
+    events: frozenset[WinEvent] = frozenset()
+
+
+@dataclass
+class TurnActions:
+    """
+    Available non-win actions a player can take during their turn.
+
+    Attributes:
+        concealed_gang_tiles: Tiles that appear exactly 4 times in hand and can be
+            declared as a concealed gang.
+        pong_upgrade_tiles: Tiles in hand that match an existing open pong meld and
+            can be added to form an exposed gang.
+    """
+
+    concealed_gang_tiles: list[Tile] = field(default_factory=list)
+    pong_upgrade_tiles: list[Tile] = field(default_factory=list)
+
+
 @dataclass
 class AssessResult:
     """
-    Result of the assess phase (Phase 2) of a player's turn.
+    Result of the assess phase (Phase 2) of a player's turn, or a discard-reaction
+    win check.
 
-    Aggregates all win conditions and action options available to the player after
-    drawing. Flags event-based wins (Winning on Replacement Tile For Flower, Winning
-    on Replacement Tile For Gang, Winning on the Last Available Tile, Earthly Hand) in
-    addition to hand-pattern-based wins.
+    Aggregates win outcomes (hand-pattern-based or flower-based) and available
+    non-win actions.
 
     Attributes:
-        can_self_pick: The drawn tile completes a winning hand (Self-Pick).
-        concealed_gang_tiles: Tiles that appear exactly 4 times in hand and can be
-            declared as a Concealed gang.
-        pong_upgrade_tiles: Tiles in hand that match an existing open pong meld and can
-            be added to form an Exposed gang.
-        has_flower_win: Player has all 8 Flower+Season tiles (Eight Immortals).
-        win_on_replacement: Self-pick after drawing from the dead wall (Winning on Replacement
-            Tile For Flower, Winning on Replacement Tile For Gang).
-        win_on_last_tile: Self-pick on the last tile of the live wall and not a replacement
-            draw (Winning on the Last Available Tile).
-        is_heavenly_hand: Dealer's 14 dealt tiles already form a winning hand (Heavenly Hand).
-        is_earthly_hand: Non-dealer self-picks on their first draw (Earthly Hand).
-        robbing_gang_by: Position of the player who robbed this player's exposed gang declaration
-            (Robbing the Gang), or None.
-        is_eighteen_arhats: Player has performed 4 gangs and self-picks (Eighteen Arhats).
-        is_fully_concealed: Player has no exposed melds (except concealed gangs) and
-            self-picks (Fully Concealed Hand).
+        win: The win outcome if a hand-pattern win is detected, or None.
+            `win.winner` identifies the winning player; when `robbing_gang_by`
+            is set, the win belongs to the robber, not the acting player.
+        flower_win: True if the player has all 8 Flower+Season tiles (Eight Immortals).
+        actions: Available non-win actions (concealed gang, exposed gang upgrade).
+        robbing_gang_by: Position of the player who robbed the gang declarer's
+            gang (Robbing the Gang), or None. When set, the gang was blocked
+            and never executed.
     """
 
-    can_self_pick: bool = False
-    concealed_gang_tiles: list[Tile] = field(default_factory=list)
-    pong_upgrade_tiles: list[Tile] = field(default_factory=list)
-    has_flower_win: bool = False
-    win_on_replacement: bool = False
-    win_on_last_tile: bool = False
-    is_heavenly_hand: bool = False
-    is_earthly_hand: bool = False
+    win: WinResult | None = None
+    flower_win: bool = False
+    actions: TurnActions = field(default_factory=TurnActions)
     robbing_gang_by: int | None = None
-    is_eighteen_arhats: bool = False
-    is_fully_concealed: bool = False
 
     @property
     def any_win(self) -> bool:
-        """True if any win condition is met (hand-pattern, flower, or event-based)."""
-        return (
-            self.can_self_pick
-            or self.has_flower_win
-            or self.is_heavenly_hand
-            or self.is_earthly_hand
-            or self.robbing_gang_by is not None
-        )
+        """True if any win condition is met (hand-pattern or flower)."""
+        return self.win is not None or self.flower_win
 
     @property
     def has_options(self) -> bool:
         """True if the player has any win or action available (win, concealed gang, gang upgrade)."""
         return (
             self.any_win
-            or bool(self.concealed_gang_tiles)
-            or bool(self.pong_upgrade_tiles)
+            or bool(self.actions.concealed_gang_tiles)
+            or bool(self.actions.pong_upgrade_tiles)
         )
 
 
@@ -96,7 +129,7 @@ class TurnPhase:
     Describes the current phase of a player's turn for the API layer.
 
     Attributes:
-        phase: One of `"draw"`, `"assess"`, `"discard"`, `"react"`, or `"ended"`.
+        phase: One of `draw`, `assess`, `discard`, `react`, or `ended`.
         draw_result: The result of the draw phase, if completed.
         assess_result: The result of the assess phase, if completed.
     """

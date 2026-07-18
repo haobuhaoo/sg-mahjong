@@ -18,7 +18,8 @@ from backend.rules.hu import (
     _is_thirteen_wonders,
     can_hu,
 )
-from backend.utils.hand_types import FOUR_GREAT_BLESSINGS, THREE_GREAT_SCHOLARS
+from backend.rules.hu_result import HandPattern
+from backend.rules.hand_patterns import FOUR_GREAT_BLESSINGS, THREE_GREAT_SCHOLARS
 
 
 def _s(n, count=1):
@@ -36,59 +37,102 @@ def _d(dragon, count=1):
 class TestCanHuStandardHand:
     def test_all_triplets_hand(self):
         hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4, 3) + _s(5, 1)
-        assert can_hu(hand, [], Suit(SuitType.DOT, 5)) is True
+        result = can_hu(hand, [], Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.CHICKEN_HAND in result.patterns
+        assert HandPattern.FULLY_CONCEALED in result.patterns
 
     def test_all_sequences_hand(self):
         hand = (
             _s(1)
-            + _s(2, 2) + _s(3, 2)
-            + _s(4, 2) + _s(5, 2)
-            + _s(6) + _s(7) + _s(8) + _s(9)
+            + _s(2, 2)
+            + _s(3, 2)
+            + _s(4, 2)
+            + _s(5, 2)
+            + _s(6)
+            + _s(7)
+            + _s(8)
+            + _s(9)
         )
-        assert can_hu(hand, [], Suit(SuitType.DOT, 5)) is True
+        result = can_hu(hand, [], Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.FULLY_CONCEALED in result.patterns
 
     def test_mixed_triplets_and_sequences(self):
-        hand = (
-            _s(1, 3)
-            + _s(2) + _s(3) + _s(4)
-            + _s(5, 3)
-            + _s(7) + _s(8) + _s(9, 2)
-        )
-        assert can_hu(hand, [], Suit(SuitType.DOT, 9)) is True
+        hand = _s(1, 3) + _s(2) + _s(3) + _s(4) + _s(5, 3) + _s(7) + _s(8) + _s(9, 2)
+        result = can_hu(hand, [], Suit(SuitType.DOT, 9))
+        assert result.is_winning is True
 
     def test_incomplete_hand_returns_false(self):
         hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4, 3)
-        assert can_hu(hand, [], Suit(SuitType.DOT, 5)) is False
+        result = can_hu(hand, [], Suit(SuitType.DOT, 5))
+        assert result.is_winning is False
 
     def test_short_hand_returns_false(self):
         hand = _s(1, 3) + _s(2, 3)
-        assert can_hu(hand, [], Suit(SuitType.DOT, 3)) is False
+        result = can_hu(hand, [], Suit(SuitType.DOT, 3))
+        assert result.is_winning is False
 
     def test_hand_with_unsplittable_remainder_returns_false(self):
         hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4, 3) + _s(5, 1)
-        assert can_hu(hand, [], Suit(SuitType.DOT, 9)) is False
+        result = can_hu(hand, [], Suit(SuitType.DOT, 9))
+        assert result.is_winning is False
 
     def test_with_open_pong_reduces_sets_needed(self):
         hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(5, 1)
         open_tile = [[Suit(SuitType.DOT, 4)] * 3]
-        assert can_hu(hand, open_tile, Suit(SuitType.DOT, 5)) is True
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.FULLY_CONCEALED not in result.patterns
 
     def test_with_open_chi_reduces_sets_needed(self):
-        hand = (
-            _s(1, 3)
-            + _s(2) + _s(3) + _s(4)
-            + _s(5, 3)
-            + _s(9)
-        )
+        hand = _s(1, 3) + _s(2) + _s(3) + _s(4) + _s(5, 3) + _s(9)
         open_tile = [
             [Suit(SuitType.DOT, 6), Suit(SuitType.DOT, 7), Suit(SuitType.DOT, 8)]
         ]
-        assert can_hu(hand, open_tile, Suit(SuitType.DOT, 9)) is True
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 9))
+        assert result.is_winning is True
 
     def test_too_many_open_melds_returns_false(self):
         hand = _s(5, 2)
         open_tile = [[Suit(SuitType.DOT, 1)] * 3] * 5
-        assert can_hu(hand, open_tile, Suit(SuitType.DOT, 5)) is False
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 5))
+        assert result.is_winning is False
+
+    def test_long_hand_returns_false(self):
+        hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4, 3) + _s(5, 2)
+        result = can_hu(hand, [], Suit(SuitType.DOT, 5))
+        assert result.is_winning is False
+
+    def test_eighteen_arhats_pattern(self):
+        hand = _s(5, 1)
+        open_tile = [
+            [Suit(SuitType.DOT, 1)] * 4,
+            [Suit(SuitType.DOT, 2)] * 4,
+            [Suit(SuitType.DOT, 3)] * 4,
+            [Suit(SuitType.DOT, 4)] * 4,
+        ]
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.EIGHTEEN_ARHATS in result.patterns
+
+    def test_eighteen_arhats_not_triggered_with_3_gangs(self):
+        hand = _s(4, 3) + _s(5, 1)
+        open_tile = [
+            [Suit(SuitType.DOT, 1)] * 4,
+            [Suit(SuitType.DOT, 2)] * 4,
+            [Suit(SuitType.DOT, 3)] * 4,
+        ]
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.EIGHTEEN_ARHATS not in result.patterns
+
+    def test_fully_concealed_with_concealed_gang(self):
+        hand = _s(2, 3) + _s(3, 3) + _s(4, 3) + _s(5, 1)
+        open_tile = [[Suit(SuitType.DOT, 1)] * 4]
+        result = can_hu(hand, open_tile, Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.FULLY_CONCEALED in result.patterns
 
 
 class TestCanFormSetsAndPair:
@@ -97,25 +141,17 @@ class TestCanFormSetsAndPair:
         assert _can_form_sets_and_pair(tiles, 4) is True
 
     def test_decomposes_all_sequences(self):
-        tiles = (
-            _s(1)
-            + _s(2, 2) + _s(3, 3)
-            + _s(4, 3) + _s(5, 2)
-            + _s(6) + _s(7, 2)
-        )
+        tiles = _s(1) + _s(2, 2) + _s(3, 3) + _s(4, 3) + _s(5, 2) + _s(6) + _s(7, 2)
         assert _can_form_sets_and_pair(tiles, 4) is True
 
     def test_decomposes_mixed(self):
-        tiles = (
-            _s(1, 3)
-            + _s(2, 3) + _s(3, 3)
-            + _s(4) + _s(5) + _s(6)
-            + _s(7, 2)
-        )
+        tiles = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4) + _s(5) + _s(6) + _s(7, 2)
         assert _can_form_sets_and_pair(tiles, 4) is True
 
     def test_fails_with_unsplittable_tiles(self):
-        tiles = _s(1, 2) + _s(3, 2) + _s(5, 2) + _s(7, 2) + _s(9, 2) + _s(2, 2) + _s(4, 2)
+        tiles = (
+            _s(1, 2) + _s(3, 2) + _s(5, 2) + _s(7, 2) + _s(9, 2) + _s(2, 2) + _s(4, 2)
+        )
         assert _can_form_sets_and_pair(tiles, 4) is False
 
     def test_fails_with_odd_count(self):
@@ -315,14 +351,22 @@ class TestCanHuSpecialHands:
         hand.append(Dragon(DragonType.ZHONG))
         for i in range(len(hand)):
             tile = hand[i]
-            remaining = hand[:i] + hand[i + 1:]
-            if can_hu(remaining, [], tile):
+            remaining = hand[:i] + hand[i + 1 :]
+            if can_hu(remaining, [], tile).is_winning:
                 return
         pytest.fail("Thirteen Wonders should return True via can_hu")
 
     def test_three_great_scholars_via_can_hu(self):
-        hand = _d(DragonType.ZHONG, 3) + _d(DragonType.FA, 3) + _d(DragonType.BAI, 3) + _s(1, 3) + _s(2)
-        assert can_hu(hand, [], Suit(SuitType.DOT, 2)) is True
+        hand = (
+            _d(DragonType.ZHONG, 3)
+            + _d(DragonType.FA, 3)
+            + _d(DragonType.BAI, 3)
+            + _s(1, 3)
+            + _s(2)
+        )
+        result = can_hu(hand, [], Suit(SuitType.DOT, 2))
+        assert result.is_winning is True
+        assert HandPattern.THREE_GREAT_SCHOLARS in result.patterns
 
     def test_four_great_blessings_via_can_hu(self):
         hand = (
@@ -332,7 +376,9 @@ class TestCanHuSpecialHands:
             + _w(WindType.BEI, 3)
             + _s(1, 1)
         )
-        assert can_hu(hand, [], Suit(SuitType.DOT, 1)) is True
+        result = can_hu(hand, [], Suit(SuitType.DOT, 1))
+        assert result.is_winning is True
+        assert HandPattern.FOUR_GREAT_BLESSINGS in result.patterns
 
     def test_thirteen_wonders_rejected_with_open_melds(self):
         hand = []
@@ -346,6 +392,6 @@ class TestCanHuSpecialHands:
         hand.append(Dragon(DragonType.ZHONG))
         for i in range(len(hand)):
             tile = hand[i]
-            remaining = hand[:i] + hand[i + 1:]
-            if can_hu(remaining, [[Suit(SuitType.DOT, 1)] * 3], tile):
+            remaining = hand[:i] + hand[i + 1 :]
+            if can_hu(remaining, [[Suit(SuitType.DOT, 1)] * 3], tile).is_winning:
                 pytest.fail("Thirteen Wonders with open melds should return False")
