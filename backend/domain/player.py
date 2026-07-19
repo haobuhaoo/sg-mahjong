@@ -1,6 +1,7 @@
 from collections import Counter
 import random
 
+from backend.domain.meld import Meld
 from backend.domain.tiles import (
     Animal,
     Bonus,
@@ -13,7 +14,6 @@ from backend.domain.tiles import (
     WindType,
     MeldType,
 )
-from backend.rules.hu import can_hu
 from backend.rules.meld_discard_rules import get_invalid_discard_tiles
 from backend.utils.errors import DiscardError, InvalidActionError
 from backend.utils.helper import is_bonus_tile, is_honor_tile, is_suit_tile
@@ -38,7 +38,7 @@ class Player:
         self.tai = tai
         self.hand_tile: list[Tile] = []
         self.bonus_tile: list[Bonus] = []
-        self.open_tile: list[list[Tile]] = []
+        self.open_tile: list[Meld] = []
 
         self.drawn_tile: Tile | None = None
         self.drawn_bonus_tiles: list[Tile] = []
@@ -53,7 +53,7 @@ class Player:
 
     def __str__(self):
         open_tiles = "; ".join(
-            ", ".join(str(t) for t in meld) for meld in self.open_tile
+            ", ".join(str(t) for t in meld.tiles) for meld in self.open_tile
         )
         return (
             f"Player {self.position + 1}"
@@ -94,14 +94,14 @@ class Player:
         self.hand_tile += hand_tile
         self._sort_tiles(self.hand_tile)
 
-    def add_open_tile(self, open_tile: list[Tile]) -> None:
+    def add_open_tile(self, open_tile: list[Tile], is_exposed: bool = True) -> None:
         """Add a revealed meld to the player's open melds."""
         self._sort_tiles(open_tile)
-        self.open_tile.append(open_tile)
+        self.open_tile.append(Meld(tiles=open_tile, is_exposed=is_exposed))
 
     def get_open_tiles(self) -> list[Tile]:
         """Return a flat list of all tiles in the player's opened melds."""
-        return [tile for meld in self.open_tile for tile in meld]
+        return [tile for meld in self.open_tile for tile in meld.tiles]
 
     def count_flower_season_tiles(self) -> int:
         """Return the number of Flower and Season tiles (excluding Animals)."""
@@ -120,35 +120,6 @@ class Player:
 
         return False
 
-    def check_hand(self, prev_player: int, tile: Tile) -> tuple[bool, bool, bool, bool]:
-        """Check if the player can hu, gang, pong, or chi the given tile."""
-        return (
-            self.can_hu(tile),
-            self.can_gang(tile),
-            self.can_pong(tile),
-            self.can_chi(prev_player, tile),
-        )
-
-    def can_hu(self, tile: Tile) -> bool:
-        """Return True if the player can declare hu on the given tile."""
-        return self._check_hu(tile)
-
-    def can_gang(self, tile: Tile) -> bool:
-        """Return True if the player can form a gang with the given tile."""
-        return self._check_gang(tile)
-
-    def can_pong(self, tile: Tile) -> bool:
-        """Return True if the player can form a pong with the given tile."""
-        return self._check_pong(tile)
-
-    def can_chi(self, prev_player: int, tile: Tile) -> bool:
-        """Return True if the player can chi the given tile from the previous player."""
-        return (
-            (prev_player + 1) % 4 == self.position
-            and is_suit_tile(tile)
-            and self._check_chi(tile)
-        )
-
     def find_concealed_gang_tiles(self) -> list[Tile]:
         """Return distinct tiles that appear exactly 4 times in the player's hand."""
         counts = Counter(self.hand_tile)
@@ -160,7 +131,7 @@ class Player:
             tile
             for tile in set(self.hand_tile)
             if any(
-                len(meld) == 3 and all(t == tile for t in meld)
+                len(meld.tiles) == 3 and all(t == tile for t in meld.tiles)
                 for meld in self.open_tile
             )
         ]
@@ -261,7 +232,7 @@ class Player:
             )
         for _ in range(4):
             self._remove_from_hand(tile)
-        self.add_open_tile([tile, tile, tile, tile])
+        self.add_open_tile([tile, tile, tile, tile], is_exposed=False)
         self._last_meld_type = MeldType.GANG
         self._last_meld_from_hand = [tile, tile, tile, tile]
         self._set_invalid_discard_tiles(MeldType.GANG, tile)
@@ -286,7 +257,7 @@ class Player:
             (
                 meld
                 for meld in self.open_tile
-                if len(meld) == 3 and all(t == tile for t in meld)
+                if len(meld.tiles) == 3 and all(t == tile for t in meld.tiles)
             ),
             None,
         )
@@ -295,8 +266,8 @@ class Player:
                 f"No open pong to upgrade with {tile}", MeldType.GANG, tile
             )
         self._remove_from_hand(tile)
-        pong_meld.append(tile)
-        self._sort_tiles(pong_meld)
+        pong_meld.tiles.append(tile)
+        self._sort_tiles(pong_meld.tiles)
         self._last_meld_type = MeldType.GANG
         self._last_meld_from_hand = []
         self._set_invalid_discard_tiles(MeldType.GANG, tile)
@@ -361,10 +332,6 @@ class Player:
             self.add_tai()
             self._seasons_max_tai = True
 
-    def _check_chi(self, tile: Suit) -> bool:
-        """Return True if the player's hand contains a valid chi for the given suit tile."""
-        return self._find_chi_tiles(tile) is not None
-
     def _check_pong(self, tile: Tile) -> bool:
         """Return True if the player's hand has enough matching tiles to pong."""
         return 2 <= self.hand_tile.count(tile) <= 3
@@ -372,13 +339,9 @@ class Player:
     def _check_gang(self, tile: Tile) -> bool:
         """Return True if the player can form a gang from hand or an exposed pong."""
         return self.hand_tile.count(tile) == 3 or any(
-            len(meld) == 3 and all(meld_tile == tile for meld_tile in meld)
+            len(meld.tiles) == 3 and all(meld_tile == tile for meld_tile in meld.tiles)
             for meld in self.open_tile
         )
-
-    def _check_hu(self, tile: Tile) -> bool:
-        """Return True if the player can hu on the given tile."""
-        return can_hu(self.hand_tile, self.open_tile, tile).is_winning
 
     def _find_chi_tiles(self, tile: Suit) -> list[Suit] | None:
         """Find and return a valid chi pair from the hand for the given suit tile."""
@@ -455,15 +418,16 @@ class Player:
                 (
                     meld
                     for meld in self.open_tile
-                    if len(meld) == 3 and all(meld_tile == tile for meld_tile in meld)
+                    if len(meld.tiles) == 3
+                    and all(meld_tile == tile for meld_tile in meld.tiles)
                 ),
                 None,
             )
             if pong_meld is None:
                 return
 
-            pong_meld.append(tile)
-            self._sort_tiles(pong_meld)
+            pong_meld.tiles.append(tile)
+            self._sort_tiles(pong_meld.tiles)
             self._last_meld_type = MeldType.GANG
             self._last_meld_from_hand = []
 

@@ -1,6 +1,7 @@
 import pytest
 
 from backend.domain.game_state import GameState
+from backend.domain.meld import Meld
 from backend.domain.player import Player
 from backend.domain.tiles import (
     Animal,
@@ -289,7 +290,7 @@ class TestPlayerAssessHand:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile])
         result = engine.player_assess_hand(p)
         assert tile in result.actions.pong_upgrade_tiles
@@ -445,7 +446,7 @@ class TestDeclareConcealedGang:
         assert isinstance(result, DrawResult)
         assert result.drawn_tile is not None
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_draws_from_dead_wall(self):
         wall = [Suit(SuitType.DOT, 1)] * 100
@@ -474,13 +475,13 @@ class TestDeclareExposedGang:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile, Suit(SuitType.DOT, 9)])
         players = [p]
         result = engine.declare_exposed_gang(p, tile, players)
         assert isinstance(result, DrawResult)
         assert result.drawn_tile is not None
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_robbed_by_other_player(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -494,7 +495,7 @@ class TestDeclareExposedGang:
             + [Suit(SuitType.DOT, 5)]
         )
         p = make_player()
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile])
         players = [p, robber]
         result = engine.declare_exposed_gang(p, tile, players)
@@ -504,14 +505,14 @@ class TestDeclareExposedGang:
         assert result.win.winner == 1
         assert result.win.source == WinSource.DISCARD
         assert WinEvent.ROBBING_GANG in result.win.events
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
 
     def test_not_robbed_if_no_can_hu(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         other = Player(1)
         tile = Suit(SuitType.DOT, 5)
         p = make_player()
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile])
         players = [p, other]
         result = engine.declare_exposed_gang(p, tile, players)
@@ -731,7 +732,7 @@ class TestChiTile:
         result = engine.chi_tile(p, Suit(SuitType.DOT, 5))
         assert isinstance(result, Suit)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
 
     def test_error_propagates_on_invalid_chi(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -758,7 +759,7 @@ class TestExecuteChi:
         p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4)])
         engine.execute_chi(p, Suit(SuitType.DOT, 5))
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
         assert len(p.hand_tile) == 0
 
 
@@ -771,7 +772,7 @@ class TestPongTile:
         result = engine.pong_tile(p, tile)
         assert isinstance(result, Suit)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
 
     def test_updates_tai_for_honor_tiles(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -796,7 +797,7 @@ class TestExecutePong:
         p.add_to_hand([tile, tile])
         engine.execute_pong(p, tile)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
         assert p.tai >= 1
 
 
@@ -810,7 +811,7 @@ class TestGangTile:
         result = engine.gang_tile(p, tile, players)
         assert isinstance(result, Suit)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_gang_draws_from_dead_wall(self):
         wall = [Suit(SuitType.DOT, 1)] * 100
@@ -828,12 +829,12 @@ class TestGangTile:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         players = [p]
         result = engine.gang_tile(p, tile, players)
         assert isinstance(result, Suit)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_error_propagates_on_invalid_gang(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
@@ -851,7 +852,7 @@ class TestExecuteGang:
         p.add_to_hand([tile, tile, tile])
         engine.execute_gang(p, tile)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
         assert p.tai == 1
 
 
@@ -902,10 +903,10 @@ class TestEighteenArhats:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         p.open_tile = [
-            [Suit(SuitType.DOT, 1)] * 4,
-            [Suit(SuitType.DOT, 2)] * 4,
-            [Suit(SuitType.DOT, 3)] * 4,
-            [Suit(SuitType.DOT, 4)] * 4,
+            Meld(tiles=[Suit(SuitType.DOT, 1)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 2)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 3)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 4)] * 4, is_exposed=True),
         ]
         p.add_to_hand([Suit(SuitType.DOT, 5)])
         p.receive_tile(Suit(SuitType.DOT, 5))
@@ -917,9 +918,9 @@ class TestEighteenArhats:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         p.open_tile = [
-            [Suit(SuitType.DOT, 1)] * 4,
-            [Suit(SuitType.DOT, 2)] * 4,
-            [Suit(SuitType.DOT, 3)] * 4,
+            Meld(tiles=[Suit(SuitType.DOT, 1)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 2)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 3)] * 4, is_exposed=True),
         ]
         p.add_to_hand([Suit(SuitType.DOT, 4)] * 3 + [Suit(SuitType.DOT, 5)])
         p.receive_tile(Suit(SuitType.DOT, 5))
@@ -931,10 +932,10 @@ class TestEighteenArhats:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         p.open_tile = [
-            [Suit(SuitType.DOT, 1)] * 4,
-            [Suit(SuitType.DOT, 2)] * 4,
-            [Suit(SuitType.DOT, 3)] * 4,
-            [Suit(SuitType.DOT, 4)] * 4,
+            Meld(tiles=[Suit(SuitType.DOT, 1)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 2)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 3)] * 4, is_exposed=True),
+            Meld(tiles=[Suit(SuitType.DOT, 4)] * 4, is_exposed=True),
         ]
         p.receive_tile(Suit(SuitType.DOT, 9))
         result = engine.player_assess_hand(p)
@@ -960,7 +961,7 @@ class TestFullyConcealedHand:
     def test_fully_concealed_with_concealed_gang_allowed(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
-        p.open_tile = [[Suit(SuitType.DOT, 1)] * 4]
+        p.open_tile = [Meld(tiles=[Suit(SuitType.DOT, 1)] * 4, is_exposed=False)]
         p.add_to_hand(
             [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
@@ -975,7 +976,7 @@ class TestFullyConcealedHand:
     def test_not_fully_concealed_with_exposed_pong(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
-        p.open_tile = [[Suit(SuitType.DOT, 1)] * 3]
+        p.open_tile = [Meld(tiles=[Suit(SuitType.DOT, 1)] * 3, is_exposed=True)]
         p.add_to_hand(
             [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3

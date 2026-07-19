@@ -100,11 +100,14 @@ class TestSerializePlayer:
 
     def test_open_tiles_serialized_as_melds(self):
         p = Player(0)
-        p.add_open_tile([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 3)])
+        p.add_open_tile(
+            [Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 3)]
+        )
         result = serialize_player(p)
         assert len(result["open_tile"]) == 1
-        assert len(result["open_tile"][0]) == 3
-        assert result["open_tile"][0][0]["type"] == "Suit"
+        assert len(result["open_tile"][0]["tiles"]) == 3
+        assert result["open_tile"][0]["tiles"][0]["type"] == "Suit"
+        assert result["open_tile"][0]["is_exposed"] is True
 
     def test_bonus_tiles_serialized(self):
         p = Player(0)
@@ -112,6 +115,39 @@ class TestSerializePlayer:
         result = serialize_player(p)
         assert len(result["bonus_tile"]) == 1
         assert result["bonus_tile"][0]["type"] == "Flower"
+
+    def test_concealed_gang_serializes_is_exposed_false(self):
+        p = Player(0)
+        p.add_open_tile([Suit(SuitType.DOT, 1)] * 4, is_exposed=False)
+        result = serialize_player(p)
+        assert result["open_tile"][0]["is_exposed"] is False
+
+    def test_drawn_tile_serialized(self):
+        p = Player(0)
+        tile = Suit(SuitType.DOT, 5)
+        p.receive_tile(tile)
+        result = serialize_player(p)
+        assert result["drawn_tile"] is not None
+        assert result["drawn_tile"]["type"] == "Suit"
+
+    def test_drawn_bonus_tiles_serialized(self):
+        p = Player(0)
+        p.check_bonus_tile(Flower(FlowerType.PLUM))
+        result = serialize_player(p)
+        assert len(result["drawn_bonus_tiles"]) == 1
+        assert result["drawn_bonus_tiles"][0]["type"] == "Flower"
+
+    def test_bonus_count_breakdown(self):
+        p = Player(0)
+        p.add_bonus_tile([Flower(FlowerType.PLUM), Flower(FlowerType.ORCHID)])
+        p.add_bonus_tile([Animal(AnimalType.CAT)])
+        p.add_bonus_tile([Season(SeasonType.SPRING)])
+        result = serialize_player(p)
+        assert result["bonus_count"] == {
+            "animals": 1,
+            "flowers": 2,
+            "seasons": 1,
+        }
 
 
 class TestSerializeGameState:

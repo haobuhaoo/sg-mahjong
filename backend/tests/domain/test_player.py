@@ -1,5 +1,6 @@
 import pytest
 
+from backend.domain.meld import Meld
 from backend.domain.player import Player
 from backend.domain.tiles import (
     Animal,
@@ -178,13 +179,13 @@ class TestAddOpenTile:
         tiles = [Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 1)]
         p.add_open_tile(tiles)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
 
     def test_sorts_open_tiles(self):
         p = make_player()
         tiles = [Suit(SuitType.DOT, 9), Suit(SuitType.DOT, 1)]
         p.add_open_tile(tiles)
-        keys = [t.sort_key() for t in p.open_tile[0]]
+        keys = [t.sort_key() for t in p.open_tile[0].tiles]
         assert keys == sorted(keys)
 
 
@@ -209,106 +210,6 @@ class TestReceiveTile:
         p.receive_tile(tile)
         assert tile in p.hand_tile
         assert len(p.hand_tile) == 1
-
-
-class TestCheckHand:
-    def test_returns_four_bools(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 1)])
-        tile = Suit(SuitType.DOT, 1)
-        hu, gang, pong, chi = p.check_hand(0, tile)
-        assert isinstance(hu, bool)
-        assert isinstance(gang, bool)
-        assert isinstance(pong, bool)
-        assert isinstance(chi, bool)
-
-
-class TestCanGang:
-    def test_true_with_three_in_hand(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1)] * 3)
-        assert p.can_gang(Suit(SuitType.DOT, 1)) is True
-
-    def test_true_with_three_in_open(self):
-        p = make_player()
-        tile = Suit(SuitType.DOT, 1)
-        p.open_tile = [[tile, tile, tile]]
-        assert p.can_gang(tile) is True
-
-    def test_false_with_two_in_hand(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1)] * 2)
-        assert p.can_gang(Suit(SuitType.DOT, 1)) is False
-
-    def test_false_with_none(self):
-        p = make_player()
-        assert p.can_gang(Suit(SuitType.DOT, 1)) is False
-
-
-class TestCanPong:
-    def test_true_with_two_in_hand(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1)] * 2)
-        assert p.can_pong(Suit(SuitType.DOT, 1)) is True
-
-    def test_true_with_three_in_hand(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1)] * 3)
-        assert p.can_pong(Suit(SuitType.DOT, 1)) is True
-
-    def test_false_with_one_in_hand(self):
-        p = make_player()
-        p.add_to_hand([Suit(SuitType.DOT, 1)])
-        assert p.can_pong(Suit(SuitType.DOT, 1)) is False
-
-    def test_false_with_none_in_hand(self):
-        p = make_player()
-        assert p.can_pong(Suit(SuitType.DOT, 1)) is False
-
-
-class TestCanChi:
-    def build_chi_hand(self, player, suit_type, numbers):
-        for n in numbers:
-            player.add_to_hand([Suit(suit_type, n)])
-
-    def test_true_when_prev_player_and_chow_exists(self):
-        p = Player(0)
-        self.build_chi_hand(p, SuitType.DOT, [3, 4])
-        assert p.can_chi(3, Suit(SuitType.DOT, 5)) is True
-
-    def test_false_when_not_previous_player(self):
-        p = Player(0)
-        self.build_chi_hand(p, SuitType.DOT, [3, 4])
-        assert p.can_chi(2, Suit(SuitType.DOT, 5)) is False
-
-    def test_false_when_tile_is_not_suit(self):
-        p = Player(1)
-        assert p.can_chi(0, Wind(WindType.DONG)) is False
-
-    def test_false_when_no_chi_pattern(self):
-        p = Player(0)
-        self.build_chi_hand(p, SuitType.DOT, [1, 2])
-        assert p.can_chi(3, Suit(SuitType.DOT, 6)) is False
-
-    def test_true_with_gap_pattern_middle(self):
-        p = Player(1)
-        self.build_chi_hand(p, SuitType.DOT, [2, 4])
-        assert p.can_chi(0, Suit(SuitType.DOT, 3)) is True
-
-    def test_true_with_gap_pattern_first(self):
-        p = Player(1)
-        self.build_chi_hand(p, SuitType.DOT, [4, 5])
-        assert p.can_chi(0, Suit(SuitType.DOT, 3)) is True
-
-    def test_true_with_gap_pattern_last(self):
-        p = Player(1)
-        self.build_chi_hand(p, SuitType.DOT, [3, 4])
-        assert p.can_chi(0, Suit(SuitType.DOT, 5)) is True
-
-    def test_different_suit_not_considered(self):
-        p = Player(0)
-        self.build_chi_hand(p, SuitType.CHARACTER, [3, 4])
-        assert p.can_chi(3, Suit(SuitType.DOT, 5)) is False
 
 
 class TestDiscardTile:
@@ -380,7 +281,7 @@ class TestChiTile:
         assert Suit(SuitType.DOT, 4) in p.get_open_tiles()
         assert Suit(SuitType.DOT, 5) in p.get_open_tiles()
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
         assert len(p.hand_tile) == 0
 
     def test_sets_invalid_discard_tiles_after_chi(self):
@@ -400,7 +301,7 @@ class TestChiTile:
         p.add_to_hand([Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 4)])
         p.chi_tile(Suit(SuitType.DOT, 3))
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
         assert Suit(SuitType.DOT, 3) in p.get_open_tiles()
 
 
@@ -411,7 +312,7 @@ class TestPongTile:
         p.add_to_hand([tile, tile])
         p.pong_tile(tile)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 3
+        assert len(p.open_tile[0].tiles) == 3
         assert len(p.hand_tile) == 0
 
     def test_sets_invalid_discard_tiles_after_pong(self):
@@ -440,16 +341,16 @@ class TestGangTile:
         p.add_to_hand([tile, tile, tile])
         p.gang_tile(tile)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
         assert len(p.hand_tile) == 0
 
     def test_gang_from_open_pong(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.gang_tile(tile)
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_sets_invalid_discard_tiles_after_gang(self):
         p = make_player()
@@ -664,7 +565,7 @@ class TestMakeConcealedGang:
         p.make_concealed_gang(tile)
         assert tile not in p.hand_tile
         assert len(p.open_tile) == 1
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_raises_when_not_four_in_hand(self):
         p = make_player()
@@ -691,7 +592,7 @@ class TestFindPongUpgradeTiles:
     def test_returns_tile_when_hand_matches_open_pong(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile])
         result = p.find_pong_upgrade_tiles()
         assert tile in result
@@ -706,7 +607,7 @@ class TestFindPongUpgradeTiles:
         p = make_player()
         tile_pong = Suit(SuitType.DOT, 5)
         tile_hand = Suit(SuitType.DOT, 9)
-        p.open_tile = [[tile_pong, tile_pong, tile_pong]]
+        p.open_tile = [Meld(tiles=[tile_pong, tile_pong, tile_pong], is_exposed=True)]
         p.add_to_hand([tile_hand])
         assert p.find_pong_upgrade_tiles() == []
 
@@ -715,15 +616,15 @@ class TestMakeExposedGang:
     def test_upgrades_existing_pong(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile])
         p.make_exposed_gang(tile)
-        assert len(p.open_tile[0]) == 4
+        assert len(p.open_tile[0].tiles) == 4
 
     def test_removes_hand_tile(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         p.add_to_hand([tile, Suit(SuitType.DOT, 9)])
         p.make_exposed_gang(tile)
         assert tile not in p.hand_tile
@@ -738,6 +639,6 @@ class TestMakeExposedGang:
     def test_raises_when_hand_does_not_have_tile(self):
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        p.open_tile = [[tile, tile, tile]]
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         with pytest.raises(InvalidActionError, match="Cannot form exposed gang"):
             p.make_exposed_gang(tile)

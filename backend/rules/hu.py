@@ -1,16 +1,25 @@
 from collections import Counter
 
-from backend.domain.tiles import Suit, Tile
+from backend.domain.meld import Meld
+from backend.domain.tiles import Dragon, Suit, Tile, Wind, WindType
 from backend.rules.hu_result import HandPattern, HuResult
 from backend.rules.hand_patterns import (
     FOUR_GREAT_BLESSINGS,
     THIRTEEN_WONDERS,
     THREE_GREAT_SCHOLARS,
 )
-from backend.utils.helper import is_suit_tile
+from backend.utils.helper import is_chi_meld, is_honor_tile, is_suit_tile
 
 
-def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> HuResult:
+def can_hu(
+    hand_tile: list[Tile],
+    open_tile: list[Meld],
+    tile: Tile,
+    *,
+    seat_wind: WindType,
+    prevalent_wind: WindType,
+    bonus_count: int,
+) -> HuResult:
     """
     Check if player can win with the given tile and classify the hand patterns.
 
@@ -28,6 +37,9 @@ def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> Hu
     A Short Hand (fewer tiles than expected) or Long Hand (more tiles than expected)
     forfeits the right to win for the current hand, even if the tiles happen to look
     complete.
+
+    `seat_wind` and `prevalent_wind` are the player's and table's winds.
+    `bonus_count` is the number of bonus tiles the player holds.
 
     Returns:
         HuResult with `is_winning=True` and the set of applicable hand patterns if
@@ -50,20 +62,40 @@ def can_hu(hand_tile: list[Tile], open_tile: list[list[Tile]], tile: Tile) -> Hu
             patterns.add(HandPattern.CHICKEN_HAND)
             if _is_eighteen_arhats(open_tile):
                 patterns.add(HandPattern.EIGHTEEN_ARHATS)
-            if not _has_exposed_pong_chi(open_tile):
+            if not _has_exposed_meld(open_tile):
                 patterns.add(HandPattern.FULLY_CONCEALED)
+            if _is_half_flush(concealed, open_tile):
+                patterns.add(HandPattern.HALF_FLUSH)
+            if _is_full_flush(concealed, open_tile):
+                patterns.add(HandPattern.FULL_FLUSH)
+            if _is_all_honour(concealed, open_tile):
+                patterns.add(HandPattern.ALL_HONOUR)
+            if _is_pure_terminals(concealed, open_tile):
+                patterns.add(HandPattern.PURE_TERMINALS)
+            if _is_triplets_hand(concealed, sets_needed, open_tile):
+                patterns.add(HandPattern.TRIPLETS_HAND)
+                if _is_mixed_terminals(concealed, open_tile):
+                    patterns.add(HandPattern.MIXED_TERMINALS)
+            if _is_sequence_hand(
+                concealed, sets_needed, seat_wind, prevalent_wind, bonus_count
+            ):
+                patterns.add(HandPattern.SEQUENCE_HAND)
 
     # Special case: Thirteen Wonders (only valid with no open melds)
     if not open_tile and _is_thirteen_wonders(concealed):
         patterns.add(HandPattern.THIRTEEN_WONDERS)
 
-    # Special case: Three Great Scholars
+    # Special case: Three Great/Lesser Scholars
     if _is_three_great_scholars(concealed, open_tile):
         patterns.add(HandPattern.THREE_GREAT_SCHOLARS)
+    if _is_three_lesser_scholars(concealed, open_tile):
+        patterns.add(HandPattern.THREE_LESSER_SCHOLARS)
 
-    # Special case: Four Great Blessings
+    # Special case: Four Great/Lesser Blessings
     if _is_four_great_blessings(concealed, open_tile):
         patterns.add(HandPattern.FOUR_GREAT_BLESSINGS)
+    if _is_four_lesser_blessings(concealed, open_tile):
+        patterns.add(HandPattern.FOUR_LESSER_BLESSINGS)
 
     if patterns:
         return HuResult(True, frozenset(patterns))
@@ -101,8 +133,28 @@ def _can_form_sets_and_pair(concealed: list[Tile], sets_needed: int) -> bool:
 
 def _can_decompose(counter: Counter, sets_needed: int) -> bool:
     """
-    Recursively check whether `counter` can be split into exactly
-    `sets_needed` melds (triplets and/or runs), with nothing left over.
+    Check whether `counter` can be split into exactly `sets_needed` melds
+    (triplets and/or runs), with nothing left over.
+
+    Delegates to `_try_decompose` with both meld types allowed.
+    """
+    return _try_decompose(counter, sets_needed) is not None
+
+
+def _try_decompose(
+    counter: Counter,
+    sets_needed: int,
+    *,
+    allow_triplets: bool = True,
+    allow_sequences: bool = True,
+) -> list[str] | None:
+    """
+    Recursively split `counter` into exactly `sets_needed` melds, returning
+    the list of set types ('triplet' / 'sequence') on success, or None.
+
+    `allow_triplets` and `allow_sequences` gate which meld types are legal.
+    When both are True the search is triplet-first; when only one is True
+    the search is strict — only that meld type is attempted.
 
     Always resolves the smallest remaining tile first (via sort_key()):
     since nothing smaller exists in the multiset, that tile can only be
@@ -110,27 +162,33 @@ def _can_decompose(counter: Counter, sets_needed: int) -> bool:
     This keeps the branching correct and small.
     """
     if sets_needed == 0:
-        return not counter
+        return [] if not counter else None
     if not counter:
-        return False
+        return None
 
     tile = min(counter.keys(), key=lambda t: t.sort_key())
 
     # option 1: pong meld
-    if counter[tile] >= 3:
+    if allow_triplets and counter[tile] >= 3:
         counter[tile] -= 3
         if counter[tile] == 0:
             del counter[tile]
 
-        if _can_decompose(counter, sets_needed - 1):
+        result = _try_decompose(
+            counter,
+            sets_needed - 1,
+            allow_triplets=allow_triplets,
+            allow_sequences=allow_sequences,
+        )
+        if result is not None:
             counter[tile] = counter.get(tile, 0) + 3
-            return True
+            return ["triplet"] + result
 
         counter[tile] = counter.get(tile, 0) + 3
 
     # option 2: chi meld - suited tiles only, and only as the start
     # of the run since `tile` is the current smallest remaining.
-    if is_suit_tile(tile) and tile.number <= 7:
+    if allow_sequences and is_suit_tile(tile) and tile.number <= 7:
         t2, t3 = Suit(tile.type, tile.number + 1), Suit(tile.type, tile.number + 2)
         chi_meld = (tile, t2, t3)
         if counter.get(t2, 0) > 0 and counter.get(t3, 0) > 0:
@@ -139,29 +197,67 @@ def _can_decompose(counter: Counter, sets_needed: int) -> bool:
                 if counter[t] == 0:
                     del counter[t]
 
-            if _can_decompose(counter, sets_needed - 1):
+            result = _try_decompose(
+                counter,
+                sets_needed - 1,
+                allow_triplets=allow_triplets,
+                allow_sequences=allow_sequences,
+            )
+            if result is not None:
                 for t in chi_meld:
                     counter[t] = counter.get(t, 0) + 1
-                return True
+                return ["sequence"] + result
 
             for t in chi_meld:
                 counter[t] = counter.get(t, 0) + 1
 
-    return False
+    return None
 
 
-def _has_exposed_pong_chi(open_tile: list[list[Tile]]) -> bool:
+def _classify_concealed_sets(
+    concealed: list[Tile],
+    sets_needed: int,
+    *,
+    allow_triplets: bool = True,
+    allow_sequences: bool = True,
+) -> list[str] | None:
     """
-    Return True if the player has any exposed pong or chi meld (length-3 melds).
+    Try every distinct tile as the hand's pair (eye), then decompose the
+    remaining tiles into `sets_needed` melds of the allowed types.
 
-    A gang formed by claiming another player's discard is also an exposed meld
-    but is not yet distinguishable from a concealed gang in the `open_tile`
-    representation (both are length-4 lists).
+    Returns the list of set types ('triplet' / 'sequence') for the first
+    successful decomposition, or None if no decomposition is possible.
     """
-    # TODO: track per-meld concealment state in `open_tile` so that exposed
-    # gangs (from discard) can be distinguished from concealed gangs. Once that
-    # is done, this check should also return True for exposed gang melds.
-    return any(len(meld) == 3 for meld in open_tile)
+    counter = Counter(concealed)
+
+    for tile in list(counter.keys()):
+        if counter[tile] >= 2:
+            counter[tile] -= 2
+            if counter[tile] == 0:
+                del counter[tile]
+
+            result = _try_decompose(
+                counter,
+                sets_needed,
+                allow_triplets=allow_triplets,
+                allow_sequences=allow_sequences,
+            )
+            counter[tile] = counter.get(tile, 0) + 2
+
+            if result is not None:
+                return result
+
+    return None
+
+
+def _has_exposed_meld(open_tile: list[Meld]) -> bool:
+    """
+    Return True if the player has any exposed meld (chi, pong, exposed gang,
+    or pong-upgrade gang).
+
+    A concealed gang formed from four hand tiles does not count as exposed.
+    """
+    return any(meld.is_exposed for meld in open_tile)
 
 
 def _is_thirteen_wonders(tiles: list[Tile]) -> bool:
@@ -178,9 +274,7 @@ def _is_thirteen_wonders(tiles: list[Tile]) -> bool:
     return len(counter) == 13 and all(t in THIRTEEN_WONDERS for t in tiles)
 
 
-def _is_three_great_scholars(
-    hand_tile: list[Tile], open_tile: list[list[Tile]]
-) -> bool:
+def _is_three_great_scholars(hand_tile: list[Tile], open_tile: list[Meld]) -> bool:
     """
     Three Great Scholars:
 
@@ -190,15 +284,41 @@ def _is_three_great_scholars(
     """
     dragon_tiles = [t for t in hand_tile if t in THREE_GREAT_SCHOLARS]
     dragon_tiles.extend(
-        [tile for meld in open_tile for tile in meld if tile in THREE_GREAT_SCHOLARS]
+        [
+            tile
+            for meld in open_tile
+            for tile in meld.tiles
+            if tile in THREE_GREAT_SCHOLARS
+        ]
     )
     counter = Counter(dragon_tiles)
     return len(counter) == 3 and all(c >= 3 for c in counter.values())
 
 
-def _is_four_great_blessings(
-    hand_tile: list[Tile], open_tile: list[list[Tile]]
-) -> bool:
+def _is_three_lesser_scholars(hand_tile: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Three Lesser Scholars:
+
+    At least 2 of the 3 Dragon types appear 3 or more times, and the
+    remaining Dragon type appears at least 2 times, across hand and open melds.
+    """
+    dragon_tiles = [t for t in hand_tile if t in THREE_GREAT_SCHOLARS]
+    dragon_tiles.extend(
+        [
+            tile
+            for meld in open_tile
+            for tile in meld.tiles
+            if tile in THREE_GREAT_SCHOLARS
+        ]
+    )
+    counter = Counter(dragon_tiles)
+    if len(counter) != 3:
+        return False
+    counts = sorted(counter.values())
+    return counts[0] >= 2 and counts[1] >= 3
+
+
+def _is_four_great_blessings(hand_tile: list[Tile], open_tile: list[Meld]) -> bool:
     """
     Four Great Blessings:
 
@@ -208,16 +328,177 @@ def _is_four_great_blessings(
     """
     wind_tiles = [t for t in hand_tile if t in FOUR_GREAT_BLESSINGS]
     wind_tiles.extend(
-        [tile for meld in open_tile for tile in meld if tile in FOUR_GREAT_BLESSINGS]
+        [
+            tile
+            for meld in open_tile
+            for tile in meld.tiles
+            if tile in FOUR_GREAT_BLESSINGS
+        ]
     )
     counter = Counter(wind_tiles)
     return len(counter) == 4 and all(c >= 3 for c in counter.values())
 
 
-def _is_eighteen_arhats(open_tile: list[list[Tile]]) -> bool:
+def _is_four_lesser_blessings(hand_tile: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Four Lesser Blessings:
+
+    At least 3 of the 4 Wind types appear 3 or more times, and the
+    remaining Wind type appears at least 2 times, across hand and open melds.
+    """
+    wind_tiles = [t for t in hand_tile if t in FOUR_GREAT_BLESSINGS]
+    wind_tiles.extend(
+        [
+            tile
+            for meld in open_tile
+            for tile in meld.tiles
+            if tile in FOUR_GREAT_BLESSINGS
+        ]
+    )
+    counter = Counter(wind_tiles)
+    if len(counter) != 4:
+        return False
+    counts = sorted(counter.values())
+    return counts[0] >= 2 and counts[1] >= 3
+
+
+def _is_eighteen_arhats(open_tile: list[Meld]) -> bool:
     """
     Eighteen Arhats:
 
     Exactly 4 gangs (all open melds length 4).
     """
-    return len(open_tile) == 4 and all(len(meld) == 4 for meld in open_tile)
+    return len(open_tile) == 4 and all(len(meld.tiles) == 4 for meld in open_tile)
+
+
+def _is_triplets_hand(
+    concealed: list[Tile], sets_needed: int, open_tile: list[Meld]
+) -> bool:
+    """
+    Triplets Hand:
+
+    All 4 sets must be triplets (pongs/gangs) — no sequences allowed.
+
+    Checks open melds for chis, then verifies the concealed tiles can be
+    decomposed using only triplets.
+    """
+    if any(is_chi_meld(meld) for meld in open_tile):
+        return False
+    return (
+        _classify_concealed_sets(concealed, sets_needed, allow_sequences=False)
+        is not None
+    )
+
+
+def _is_half_flush(concealed: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Half Flush:
+
+    All suited tiles must belong to exactly one suit, and at least one
+    honor tile must be present.
+    """
+    all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
+    suit_types = {t.type for t in all_tiles if is_suit_tile(t)}
+    has_honor = any(is_honor_tile(t) for t in all_tiles)
+    return len(suit_types) == 1 and has_honor
+
+
+def _is_full_flush(concealed: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Full Flush:
+
+    Every tile must be a suited tile and all must be from the same suit.
+    No honor tiles allowed.
+    """
+    all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
+    if not all_tiles:
+        return False
+    suit_types = {t.type for t in all_tiles if is_suit_tile(t)}
+    has_honor = any(is_honor_tile(t) for t in all_tiles)
+    return len(suit_types) == 1 and not has_honor
+
+
+def _is_all_honour(concealed: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    All Honour:
+
+    Every tile across hand and open melds must be a Wind or Dragon.
+    """
+    all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
+    return all_tiles and all(is_honor_tile(t) for t in all_tiles)
+
+
+def _is_mixed_terminals(concealed: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Mixed Terminals:
+
+    All tiles must be either suited tiles with number 1 or 9, or honor tiles.
+    Requires the hand to also be a TRIPLETS_HAND (enforced by the caller).
+    """
+    all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
+    if not all_tiles:
+        return False
+    for t in all_tiles:
+        if is_suit_tile(t):
+            if t.number not in (1, 9):
+                return False
+        elif not is_honor_tile(t):
+            return False
+    return True
+
+
+def _is_pure_terminals(concealed: list[Tile], open_tile: list[Meld]) -> bool:
+    """
+    Pure Terminals:
+
+    All tiles must be suited tiles with number 1 or 9. No honor tiles.
+    """
+    all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
+    if not all_tiles:
+        return False
+    return all(is_suit_tile(t) and t.number in (1, 9) for t in all_tiles)
+
+
+def _is_sequence_hand(
+    concealed: list[Tile],
+    sets_needed: int,
+    seat_wind: WindType,
+    prevalent_wind: WindType,
+    bonus_count: int,
+) -> bool:
+    """
+    Sequence Hand:
+
+    4 sequences + 1 pair. The pair must not be a dragon, the seat wind,
+    or the prevalent wind. The player must have zero bonus tiles.
+
+    Trials every candidate pair tile, skipping invalid ones, and decomposes
+    the remainder using only sequences.
+    """
+    if bonus_count != 0:
+        return False
+
+    counter = Counter(concealed)
+
+    for pair_tile in list(counter.keys()):
+        if counter[pair_tile] < 2:
+            continue
+        if isinstance(pair_tile, Dragon):
+            continue
+        if isinstance(pair_tile, Wind) and pair_tile.type in (
+            seat_wind,
+            prevalent_wind,
+        ):
+            continue
+
+        counter[pair_tile] -= 2
+        if counter[pair_tile] == 0:
+            del counter[pair_tile]
+
+        result = _try_decompose(counter, sets_needed, allow_triplets=False)
+        counter[pair_tile] = counter.get(pair_tile, 0) + 2
+
+        if result is not None:
+            return True
+
+    return False

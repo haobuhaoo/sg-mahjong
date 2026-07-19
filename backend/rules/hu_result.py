@@ -11,6 +11,15 @@ class HandPattern(Enum):
     EIGHTEEN_ARHATS = auto()
     FULLY_CONCEALED = auto()
     CHICKEN_HAND = auto()
+    TRIPLETS_HAND = auto()
+    HALF_FLUSH = auto()
+    FULL_FLUSH = auto()
+    ALL_HONOUR = auto()
+    MIXED_TERMINALS = auto()
+    PURE_TERMINALS = auto()
+    SEQUENCE_HAND = auto()
+    THREE_LESSER_SCHOLARS = auto()
+    FOUR_LESSER_BLESSINGS = auto()
 
 
 @dataclass(frozen=True)

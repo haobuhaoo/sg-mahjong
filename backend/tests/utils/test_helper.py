@@ -1,3 +1,4 @@
+from backend.domain.meld import Meld
 from backend.domain.tiles import (
     Suit,
     SuitType,
@@ -12,7 +13,7 @@ from backend.domain.tiles import (
     Season,
     SeasonType,
 )
-from backend.utils.helper import is_suit_tile, is_honor_tile, is_bonus_tile
+from backend.utils.helper import is_suit_tile, is_honor_tile, is_bonus_tile, is_chi_meld
 
 
 class TestIsSuitTile:
@@ -65,3 +66,23 @@ class TestIsBonusTile:
 
     def test_false_for_dragon(self):
         assert is_bonus_tile(Dragon(DragonType.ZHONG)) is False
+
+
+class TestIsChiMeld:
+    def test_true_for_chi(self):
+        meld = Meld(
+            tiles=[
+                Suit(SuitType.DOT, 1),
+                Suit(SuitType.DOT, 2),
+                Suit(SuitType.DOT, 3),
+            ]
+        )
+        assert is_chi_meld(meld) is True
+
+    def test_false_for_pong(self):
+        meld = Meld(tiles=[Suit(SuitType.DOT, 1)] * 3)
+        assert is_chi_meld(meld) is False
+
+    def test_false_for_gang(self):
+        meld = Meld(tiles=[Suit(SuitType.DOT, 1)] * 4)
+        assert is_chi_meld(meld) is False

@@ -1,20 +1,8 @@
 from backend.domain.game_state import GameState
 from backend.domain.player import Player
-from backend.domain.tiles import (
-    Animal,
-    AnimalType,
-    Dragon,
-    DragonType,
-    Flower,
-    FlowerType,
-    Season,
-    SeasonType,
-    Suit,
-    SuitType,
-    Wind,
-    WindType,
-)
+from backend.domain.tiles import Suit, WindType
 from backend.engine.round_engine import RoundEngine
+from backend.utils.errors import InvalidActionError
 
 
 def main():
@@ -32,20 +20,6 @@ def main():
         round_manager.deal_starting_tiles(player_4)
         plist = [player_1, player_2, player_3, player_4]
 
-        # t = Suit(SuitType.DOT, 2)
-        # t = Dragon(DragonType.FA)
-        # player_1.add_tai()
-        # player_1.add_tai()
-        # player_1.hand_tile = []
-        # player_1.open_tile = [t, t, t]
-        # player_1.add_to_hand([t, Suit(SuitType.DOT, 8), Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 5)])
-        # print(player_1.check_hand(3, t))
-        # print(round_manager.chi_tile(player_1, t))
-        # print(player_1)
-        # print(player_1.hand_tile)
-        # print(player_1.open_tile)
-        # return
-
         skip_draw = True
         for _ in range(20):
             p = plist[game_table.current_player]
@@ -58,14 +32,8 @@ def main():
             for other in plist:
                 if other is p:
                     continue
-                hu, gang, pong, chi = other.check_hand(p.position, thrown_tile)
-                if gang or pong:
-                    print(f"{"gang " if gang else "pong "}" + thrown_tile.__str__())
-                    thrown_tile = (
-                        round_manager.gang_tile(other, thrown_tile, plist)
-                        if gang
-                        else round_manager.pong_tile(other, thrown_tile)
-                    )
+                try:
+                    thrown_tile = round_manager.gang_tile(other, thrown_tile, plist)
                     round_manager.finalize_discard(thrown_tile, other)
                     claimed = True
                     print(other)
@@ -73,9 +41,10 @@ def main():
                     print(game_table)
                     print("\n")
                     break
-                elif chi:
-                    print("chi " + thrown_tile.__str__())
-                    thrown_tile = round_manager.chi_tile(other, thrown_tile)
+                except InvalidActionError:
+                    pass
+                try:
+                    thrown_tile = round_manager.pong_tile(other, thrown_tile)
                     round_manager.finalize_discard(thrown_tile, other)
                     claimed = True
                     print(other)
@@ -83,10 +52,25 @@ def main():
                     print(game_table)
                     print("\n")
                     break
+                except InvalidActionError:
+                    pass
+                if (p.position + 1) % 4 == other.position and isinstance(
+                    thrown_tile, Suit
+                ):
+                    try:
+                        thrown_tile = round_manager.chi_tile(other, thrown_tile)
+                        round_manager.finalize_discard(thrown_tile, other)
+                        claimed = True
+                        print(other)
+                        print("---")
+                        print(game_table)
+                        print("\n")
+                        break
+                    except InvalidActionError:
+                        pass
             if not claimed:
                 round_manager.finalize_discard(thrown_tile, p)
         print(game_table)
-        # print(player_1)
     except Exception as err:
         print(f"Error: {err}")
 

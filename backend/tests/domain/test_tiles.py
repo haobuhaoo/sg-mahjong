@@ -382,7 +382,11 @@ class TestFlower:
         assert hash(Flower(FlowerType.PLUM)) != hash(Flower(FlowerType.ORCHID))
 
     def test_set_membership(self):
-        s = {Flower(FlowerType.PLUM), Flower(FlowerType.ORCHID), Flower(FlowerType.PLUM)}
+        s = {
+            Flower(FlowerType.PLUM),
+            Flower(FlowerType.ORCHID),
+            Flower(FlowerType.PLUM),
+        }
         assert len(s) == 2
 
     def test_get_ordering(self):
@@ -441,7 +445,11 @@ class TestSeason:
         assert hash(Season(SeasonType.SPRING)) != hash(Season(SeasonType.SUMMER))
 
     def test_set_membership(self):
-        s = {Season(SeasonType.SPRING), Season(SeasonType.SUMMER), Season(SeasonType.SPRING)}
+        s = {
+            Season(SeasonType.SPRING),
+            Season(SeasonType.SUMMER),
+            Season(SeasonType.SPRING),
+        }
         assert len(s) == 2
 
     def test_get_ordering(self):

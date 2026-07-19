@@ -22,7 +22,11 @@ def serialize_player(player: Player) -> dict:
         "tai": player.tai,
         "hand_tile": [serialize_tile(t) for t in player.hand_tile],
         "open_tile": [
-            [serialize_tile(t) for t in meld] for meld in player.open_tile
+            {
+                "tiles": [serialize_tile(t) for t in meld.tiles],
+                "is_exposed": meld.is_exposed,
+            }
+            for meld in player.open_tile
         ],
         "bonus_tile": [serialize_tile(t) for t in player.bonus_tile],
         "drawn_tile": serialize_tile(player.drawn_tile) if player.drawn_tile else None,

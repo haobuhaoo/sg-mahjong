@@ -58,7 +58,14 @@ class RoundEngine:
         for i in range(len(player.hand_tile)):
             tile = player.hand_tile[i]
             remaining = player.hand_tile[:i] + player.hand_tile[i + 1 :]
-            hu_result = can_hu(remaining, player.open_tile, tile)
+            hu_result = can_hu(
+                remaining,
+                player.open_tile,
+                tile,
+                seat_wind=player.seat_wind,
+                prevalent_wind=self.state.prevalent_wind,
+                bonus_count=len(player.bonus_tile),
+            )
             if hu_result.is_winning:
                 return AssessResult(
                     win=WinResult(
@@ -187,7 +194,12 @@ class RoundEngine:
         tile = player.drawn_tile
         if tile is not None:
             hu_result = can_hu(
-                self._hand_without_drawn_tile(player), player.open_tile, tile
+                self._hand_without_drawn_tile(player),
+                player.open_tile,
+                tile,
+                seat_wind=player.seat_wind,
+                prevalent_wind=self.state.prevalent_wind,
+                bonus_count=len(player.bonus_tile),
             )
             if hu_result.is_winning:
                 events: set[WinEvent] = set()
@@ -227,7 +239,14 @@ class RoundEngine:
                 "No drawn tile to self-pick with", "self-pick", tile
             )
         hand_without_tile = self._hand_without_drawn_tile(player)
-        if not can_hu(hand_without_tile, player.open_tile, tile).is_winning:
+        if not can_hu(
+            hand_without_tile,
+            player.open_tile,
+            tile,
+            seat_wind=player.seat_wind,
+            prevalent_wind=self.state.prevalent_wind,
+            bonus_count=len(player.bonus_tile),
+        ).is_winning:
             raise InvalidActionError(f"Cannot self-pick with {tile}", "self-pick", tile)
         return tile
 
@@ -248,7 +267,14 @@ class RoundEngine:
         """
         for p in players:
             if p is not player:
-                hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+                hu_result = can_hu(
+                    p.hand_tile,
+                    p.open_tile,
+                    tile,
+                    seat_wind=p.seat_wind,
+                    prevalent_wind=self.state.prevalent_wind,
+                    bonus_count=len(p.bonus_tile),
+                )
                 if (
                     hu_result.is_winning
                     and HandPattern.THIRTEEN_WONDERS in hu_result.patterns
@@ -283,7 +309,14 @@ class RoundEngine:
         """
         for p in players:
             if p is not player:
-                hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+                hu_result = can_hu(
+                    p.hand_tile,
+                    p.open_tile,
+                    tile,
+                    seat_wind=p.seat_wind,
+                    prevalent_wind=self.state.prevalent_wind,
+                    bonus_count=len(p.bonus_tile),
+                )
                 if hu_result.is_winning:
                     return AssessResult(
                         robbing_gang_by=p.position,
@@ -362,7 +395,14 @@ class RoundEngine:
         if self.state.turn_count != 0:
             return AssessResult()
         for p in non_dealers:
-            hu_result = can_hu(p.hand_tile, p.open_tile, tile)
+            hu_result = can_hu(
+                p.hand_tile,
+                p.open_tile,
+                tile,
+                seat_wind=p.seat_wind,
+                prevalent_wind=self.state.prevalent_wind,
+                bonus_count=len(p.bonus_tile),
+            )
             if hu_result.is_winning:
                 return AssessResult(
                     win=WinResult(
@@ -393,7 +433,14 @@ class RoundEngine:
             return AssessResult()
         if any(p.open_tile for p in all_players):
             return AssessResult()
-        hu_result = can_hu(claimant.hand_tile, claimant.open_tile, tile)
+        hu_result = can_hu(
+            claimant.hand_tile,
+            claimant.open_tile,
+            tile,
+            seat_wind=claimant.seat_wind,
+            prevalent_wind=self.state.prevalent_wind,
+            bonus_count=len(claimant.bonus_tile),
+        )
         if hu_result.is_winning:
             return AssessResult(
                 win=WinResult(
