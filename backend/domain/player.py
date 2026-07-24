@@ -20,9 +20,14 @@ from backend.utils.helper import is_bonus_tile, is_honor_tile, is_suit_tile
 
 
 class Player:
+    """
+    Represent a player's state: hand tiles, open melds, bonus tiles, seat wind, tai score, and
+    drawn-tile tracking.
+    """
+
     def __init__(self, position: int, tai: int = 0):
         """
-        Creates a new player.
+        Create a new player.
 
         Args:
             position: The position of the player (0-3 valid)
@@ -39,7 +44,6 @@ class Player:
         self.hand_tile: list[Tile] = []
         self.bonus_tile: list[Bonus] = []
         self.open_tile: list[Meld] = []
-
         self.drawn_tile: Tile | None = None
         self.drawn_bonus_tiles: list[Tile] = []
 
@@ -52,9 +56,7 @@ class Player:
         self._invalid_discard_tiles: set[Tile] = set()
 
     def __str__(self):
-        open_tiles = "; ".join(
-            ", ".join(str(t) for t in meld.tiles) for meld in self.open_tile
-        )
+        open_tiles = "; ".join(", ".join(str(t) for t in meld.tiles) for meld in self.open_tile)
         return (
             f"Player {self.position + 1}"
             f"\nSeat wind: {self.seat_wind.value}"
@@ -109,9 +111,8 @@ class Player:
 
     def check_bonus_tile(self, tile: Tile) -> bool:
         """
-        Check if tile is a bonus tile, returning True if it is and adding it
-        to the player's bonus set. Also appends to `drawn_bonus_tiles` for
-        frontend visibility.
+        Check if tile is a bonus tile, returning True if it is and adding it to the player's bonus
+        set. Also append to `self.drawn_bonus_tiles` for frontend visibility.
         """
         if is_bonus_tile(tile):
             self.add_bonus_tile([tile])
@@ -137,15 +138,15 @@ class Player:
         ]
 
     def receive_tile(self, tile: Tile) -> None:
-        """Receive a drawn tile into the player's hand and track it as `drawn_tile`."""
+        """Receive a drawn tile into the player's hand and track it as `self.drawn_tile`."""
         self.add_to_hand([tile])
         self.drawn_tile = tile
 
     def discard_tile(self, idx: int) -> Tile:
         """
-        Discard a tile from the player's hand and clear one-turn invalid discard
-        restrictions. Also clears `drawn_tile` and `drawn_bonus_tiles` to signal the end
-        of the player's draw-assess window.
+        Discard a tile from the player's hand and clear one-turn invalid discard restrictions. Also
+        clear `self.drawn_tile` and `self.drawn_bonus_tiles` to signal the end of the player's
+        draw-assess window.
 
         Raises:
             IndexError: If `idx` is out of bounds
@@ -193,9 +194,7 @@ class Player:
             InvalidActionError: If player does not have 2 of `tile_pong` in hand
         """
         if not self._check_pong(tile_pong):
-            raise InvalidActionError(
-                f"Cannot pong {tile_pong}", MeldType.PONG, tile_pong
-            )
+            raise InvalidActionError(f"Cannot pong {tile_pong}", MeldType.PONG, tile_pong)
 
         self._make_pong_meld(tile_pong)
         self._set_invalid_discard_tiles(MeldType.PONG, tile_pong)
@@ -205,13 +204,11 @@ class Player:
         Perform gang on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 3 of `tile_gang` in hand or
-                3 of `tile_gang` in open set
+            InvalidActionError: If player does not have 3 of `tile_gang` in hand or 3 of
+                `tile_gang` in open set
         """
         if not self._check_gang(tile_gang):
-            raise InvalidActionError(
-                f"Cannot gang {tile_gang}", MeldType.GANG, tile_gang
-            )
+            raise InvalidActionError(f"Cannot gang {tile_gang}", MeldType.GANG, tile_gang)
 
         self._make_gang_meld(tile_gang)
         self._set_invalid_discard_tiles(MeldType.GANG, tile_gang)
@@ -220,16 +217,14 @@ class Player:
         """
         Consume 4 identical tiles from hand to form a concealed gang.
 
-        The 4 tiles are removed from the hand and added as an open meld.
-        Invalid discard restrictions are set for the gang tile.
+        The 4 tiles are removed from the hand and added as an open meld. Invalid discard
+        restrictions are set for the gang tile.
 
         Raises:
             InvalidActionError: If `tile` does not appear exactly 4 times in hand.
         """
         if self.hand_tile.count(tile) != 4:
-            raise InvalidActionError(
-                f"Cannot form concealed gang with {tile}", MeldType.GANG, tile
-            )
+            raise InvalidActionError(f"Cannot form concealed gang with {tile}", MeldType.GANG, tile)
         for _ in range(4):
             self._remove_from_hand(tile)
         self.add_open_tile([tile, tile, tile, tile], is_exposed=False)
@@ -241,18 +236,15 @@ class Player:
         """
         Upgrade an existing open pong to an exposed gang by adding a matching hand tile.
 
-        The hand tile is removed from the hand and appended to the open pong meld,
-        making it a 4-tile gang. The last meld tracking is set to indicate this
-        came from an open pong upgrade, so update_tai skips re-awarding points.
+        The hand tile is removed from the hand and appended to the open pong meld, making it a
+        4-tile gang. The last meld tracking is set to indicate this came from an open pong upgrade,
+        so `update_tai` skips re-awarding points.
 
         Raises:
-            InvalidActionError: If `tile` is not in hand or no matching open
-                pong meld exists.
+            InvalidActionError: If `tile` is not in hand or no matching open pong meld exists.
         """
         if self.hand_tile.count(tile) < 1:
-            raise InvalidActionError(
-                f"Cannot form exposed gang with {tile}", MeldType.GANG, tile
-            )
+            raise InvalidActionError(f"Cannot form exposed gang with {tile}", MeldType.GANG, tile)
         pong_meld = next(
             (
                 meld
@@ -262,9 +254,7 @@ class Player:
             None,
         )
         if pong_meld is None:
-            raise InvalidActionError(
-                f"No open pong to upgrade with {tile}", MeldType.GANG, tile
-            )
+            raise InvalidActionError(f"No open pong to upgrade with {tile}", MeldType.GANG, tile)
         self._remove_from_hand(tile)
         pong_meld.tiles.append(tile)
         self._sort_tiles(pong_meld.tiles)
@@ -274,10 +264,7 @@ class Player:
 
     def update_tai(self, tile: Tile, prevalent_wind: WindType) -> None:
         """Update tai from a claimed tile, resetting last meld tracking when appropriate."""
-        if (
-            self._last_meld_type == MeldType.GANG
-            and len(self._last_meld_from_hand) == 0
-        ):
+        if self._last_meld_type == MeldType.GANG and len(self._last_meld_from_hand) == 0:
             self._last_meld_type = None
             self._last_meld_from_hand = []
             return
@@ -380,8 +367,8 @@ class Player:
         """
         Remove and return one instance of the given tile from the hand.
 
-        Unlike `discard_tile`, this has no discard side effects (does not touch
-        `drawn_tile`, `drawn_bonus_tiles`, or invalid discard restrictions).
+        Unlike `discard_tile`, this has no discard side effects (does not touch `self.drawn_tile`,
+        `self.drawn_bonus_tiles`, or invalid discard restrictions).
 
         Raises:
             ValueError: If `tile` is not in the hand
@@ -418,8 +405,7 @@ class Player:
                 (
                     meld
                     for meld in self.open_tile
-                    if len(meld.tiles) == 3
-                    and all(meld_tile == tile for meld_tile in meld.tiles)
+                    if len(meld.tiles) == 3 and all(meld_tile == tile for meld_tile in meld.tiles)
                 ),
                 None,
             )
@@ -431,9 +417,7 @@ class Player:
             self._last_meld_type = MeldType.GANG
             self._last_meld_from_hand = []
 
-    def _set_invalid_discard_tiles(
-        self, meld_type: MeldType, thrown_tile: Tile
-    ) -> None:
+    def _set_invalid_discard_tiles(self, meld_type: MeldType, thrown_tile: Tile) -> None:
         """Compute and store invalid discard tiles after a meld restriction."""
         self._invalid_discard_tiles = get_invalid_discard_tiles(
             meld_type, self._last_meld_from_hand, thrown_tile

@@ -7,29 +7,33 @@ class HandPattern(Enum):
 
     THIRTEEN_WONDERS = auto()
     THREE_GREAT_SCHOLARS = auto()
-    FOUR_GREAT_BLESSINGS = auto()
-    EIGHTEEN_ARHATS = auto()
-    FULLY_CONCEALED = auto()
-    CHICKEN_HAND = auto()
-    TRIPLETS_HAND = auto()
-    HALF_FLUSH = auto()
-    FULL_FLUSH = auto()
-    ALL_HONOUR = auto()
-    MIXED_TERMINALS = auto()
-    PURE_TERMINALS = auto()
-    SEQUENCE_HAND = auto()
     THREE_LESSER_SCHOLARS = auto()
+    FOUR_GREAT_BLESSINGS = auto()
     FOUR_LESSER_BLESSINGS = auto()
+    EIGHTEEN_ARHATS = auto()
+    NINE_GATES = auto()
+    PURE_GREEN_SUIT = auto()
+    ALL_HONOUR = auto()
+    PURE_TERMINALS = auto()
+    MIXED_TERMINALS = auto()
+    FULLY_CONCEALED = auto()
+    SEQUENCE_HAND = auto()
+    LESSER_SEQUENCE_HAND = auto()
+    FULL_FLUSH = auto()
+    HALF_FLUSH = auto()
+    TRIPLETS_HAND = auto()
+    CHICKEN_HAND = auto()
 
 
 @dataclass(frozen=True)
 class HuResult:
-    """Result of running tile-level win detection on a hand.
+    """
+    Result of running tile-level win detection on a hand.
 
     Attributes:
         is_winning: Whether the tile + hand + open melds form a winning hand.
-        patterns: Set of hand patterns that apply to this hand. Multiple
-            patterns can apply (e.g. Triplets Hand + Half Flush).
+        patterns: Set of hand patterns that apply to this hand. Multiple patterns can apply
+            (e.g. Triplets Hand + Half Flush).
     """
 
     is_winning: bool

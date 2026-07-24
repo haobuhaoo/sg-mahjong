@@ -10,9 +10,11 @@ class Tile(ABC):
         """
         Sort the tiles in relative order (ascending):
 
-        Non-bonus tiles: Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9), Zhong, Fa, Bai, Dong, Nan, Xi, Bei
+        Non-bonus tiles: Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9), Zhong, Fa, Bai, Dong,
+        Nan, Xi, Bei
 
-        Bonus tiles: Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum, Bamboo, Spring, Summer, Autumn, Winter
+        Bonus tiles: Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum, Bamboo, Spring,
+        Summer, Autumn, Winter
         """
         pass
 
@@ -55,11 +57,7 @@ class Suit(Tile):
         return f"{self.__class__.__name__}({self.type}, {self.number})"
 
     def __eq__(self, value):
-        return (
-            isinstance(value, Suit)
-            and self.type == value.type
-            and self.number == value.number
-        )
+        return isinstance(value, Suit) and self.type == value.type and self.number == value.number
 
     def __hash__(self):
         return hash((self.type, self.number))
@@ -173,7 +171,7 @@ class Wind(Honor):
 
 # Bonus tiles
 class AnimalType(Enum):
-    """The four animal variants. Each value is (display name, ordering value)."""
+    """The four animal variants. Each value is (display name, ordering value) tuple."""
 
     CAT = ("Cat", -1)
     RAT = ("Rat", -1)
@@ -182,7 +180,7 @@ class AnimalType(Enum):
 
 
 class FlowerType(Enum):
-    """The four flower variants. Each value is (display name, matching seat position)."""
+    """The four flower variants. Each value is (display name, matching seat position) tuple."""
 
     PLUM = ("Plum", 0)
     ORCHID = ("Orchid", 1)
@@ -191,7 +189,7 @@ class FlowerType(Enum):
 
 
 class SeasonType(Enum):
-    """The four season variants. Each value is (display name, matching seat position)."""
+    """The four season variants. Each value is (display name, matching seat position) tuple."""
 
     SPRING = ("Spring", 0)
     SUMMER = ("Summer", 1)

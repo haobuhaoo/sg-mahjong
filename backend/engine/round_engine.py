@@ -17,18 +17,17 @@ from backend.utils.helper import is_bonus_tile
 
 class RoundEngine:
     """
-    Orchestrates the flow of a round following the `Draw → Assess → Act → Discard`
-    turn structure.
+    Orchestrate the flow of a round following the `Draw -> Assess -> Act -> Discard` turn structure.
 
     Each player's turn proceeds through four phases:
-      1. **Draw** — draw a tile from the live wall, recursively replacing bonus tiles.
-      2. **Assess** — check for wins (self-pick, flower win, event-based wins) and
-         available actions (concealed gang, exposed gang upgrade).
-      3. **Act** — player chooses to self-pick, declare a gang, or proceed.
-      4. **Discard** — player discards; other players may intercept (hu/gang/pong/chi).
+    1. **Draw** - draw a tile from the live wall, recursively replacing bonus tiles.
+    2. **Assess** - check for wins (self-pick, flower win, event-based wins) and available actions
+        (concealed gang, exposed gang upgrade).
+    3. **Act** - player chooses to self-pick, declare a gang, or proceed.
+    4. **Discard** - player discards; other players may intercept (hu/gang/pong/chi).
 
-    All mutable game state is owned by the injected `GameState`. This class
-    contains only the behavioural logic that acts on that state.
+    All mutable game state is owned by the injected `GameState`. This clas contains only the
+    behavioural logic that acts on that state.
     """
 
     def __init__(self, state: GameState):
@@ -47,14 +46,15 @@ class RoundEngine:
 
     def check_heavenly_hand(self, player: Player) -> AssessResult:
         """
-        Check if the dealer has a winning hand immediately after dealing and bonus
-        replacement (Heavenly Hand). Only valid for position 0 with 14 tiles.
+        Check if the dealer has a winning hand immediately after dealing and bonus replacement
+        (Heavenly Hand). Only valid for player at position 0 with 14 tiles.
 
-        Iterates over each tile in the dealer's 14-tile hand, removes it, and
-        checks whether the remaining 13 + that tile form a winning hand.
+        Iterate over each tile in the dealer's 14-tile hand, removes it, and check whether the
+        remaining 13 + that tile form a winning hand.
         """
         if player.position != 0 or len(player.hand_tile) != 14:
             return AssessResult()
+
         for i in range(len(player.hand_tile)):
             tile = player.hand_tile[i]
             remaining = player.hand_tile[:i] + player.hand_tile[i + 1 :]
@@ -90,18 +90,20 @@ class RoundEngine:
         """
         Phase 1: Draw.
 
-        Pulls a tile from the live wall (or dead wall if `is_gang`), recursively
-        replacing bonus tiles. Returns a `DrawResult` so the API can surface what
-        was drawn.
+        Pull a tile from the live wall (or dead wall if `is_gang`), recursively replacing bonus
+        tiles.
 
-        If another player has 7 Flower+Season tiles and this draw yields the 8th bonus
-        tile, that player robs it (Robbing the Eighth) and `DrawResult.robbed_by` is set.
+        If another player has 7 Flower + Season tiles and this draw yields the 8th bonus tile,
+        that player robs it (Robbing the Eighth) and `DrawResult.robbed_by` is set.
 
         Args:
             player: The player whose turn it is.
             players: All players in the game (needed for Robbing the Eighth detection).
-            is_gang: If True, draw the initial tile from the dead wall
-                (used after a gang declaration).
+            is_gang: If True, draw the initial tile from the dead wall (used after a gang
+                declaration).
+
+        Returns:
+            A `DrawResult` so the API can surface what was drawn.
         """
         player.drawn_tile = None
         player.drawn_bonus_tiles = []
@@ -112,19 +114,19 @@ class RoundEngine:
 
         def collector_with_rob(tile: Tile) -> bool:
             """
-            Bonus-tile callback for `draw_until_non_bonus` that intercepts
-            Robbing the Eighth before the drawing player collects the tile.
+            Bonus-tile callback for `draw_until_non_bonus` that intercepts Robbing the Eighth
+            before the drawing player collects the tile.
 
             For each bonus tile drawn:
-            1. If the tile is a Flower or Season and any other player already
-               has 7 Flower+Season tiles, the tile is robbed — `robbed` is set
-               and the loop stops. Animals are never robbed.
-            2. Otherwise, the tile is collected normally by the drawing player
-               via `player.check_bonus_tile` and `had_bonus` is flagged.
+            1. If the tile is a Flower or Season and any other player already has 7 Flower + Season
+            tiles, the tile is robbed - `robbed` is set and the loop stops. Animals are never
+            robbed.
+            2. Otherwise, the tile is collected normally by the drawing player via
+            `player.check_bonus_tile` and `had_bonus` is flagged.
 
             Returns:
-                True if the tile was collected and another replacement should
-                be drawn from the dead wall; False to stop the loop.
+                True if the tile was collected and another replacement should be drawn from the
+                dead wall; False to stop the loop.
             """
             nonlocal had_bonus, robbed
             if not is_bonus_tile(tile):
@@ -169,10 +171,10 @@ class RoundEngine:
         """
         Phase 2: Assess.
 
-        After drawing, checks all win conditions and available actions (concealed gang,
-        exposed gang upgrade).
+        After drawing, check all win conditions and available actions (concealed gang, exposed gang
+        upgrade).
 
-        Accepts draw-context flags (from `DrawResult`) to detect event-based wins:
+        Accept draw-context flags (from `DrawResult`) to detect event-based wins:
         - Winning on Replacement Tile (`is_replacement`)
         - Winning on the Last Available Tile (`is_last_tile` without `is_replacement`)
         - Earthly Hand (`is_first_draw` for non-dealer).
@@ -226,18 +228,17 @@ class RoundEngine:
 
     def player_self_pick(self, player: Player) -> Tile:
         """
-        Player declares self-pick win (Self-Pick).
+        Player declare self-pick win (Self-Pick).
 
-        Returns the winning tile.
+        Returns:
+            The winning tile.
 
         Raises:
             InvalidActionError: If the player cannot hu with the drawn tile
         """
         tile = player.drawn_tile
         if tile is None:
-            raise InvalidActionError(
-                "No drawn tile to self-pick with", "self-pick", tile
-            )
+            raise InvalidActionError("No drawn tile to self-pick with", "self-pick", tile)
         hand_without_tile = self._hand_without_drawn_tile(player)
         if not can_hu(
             hand_without_tile,
@@ -256,14 +257,16 @@ class RoundEngine:
         self, player: Player, tile: Tile, players: list[Player]
     ) -> DrawResult | AssessResult:
         """
-        Player declares a Concealed gang. Consumes 4 identical tiles from hand, draws
-        a replacement, and returns the draw result.
+        Player declare a Concealed gang. Consumes 4 identical tiles from hand and draws a
+        replacement tile.
 
-        Before executing, checks if any other player can rob the concealed gang —
-        only allowed when the robber is waiting for the tile to complete Thirteen
-        Wonders (Robbing the Gang special condition).
+        Before executing, check if any other player can rob the concealed gang - only allowed when
+        the robber is waiting for the tile to complete Thirteen Wonders (Robbing the Gang special
+        condition). Caller should re-run assess after this (the replacement could win).
 
-        Caller should re-run assess after this (the replacement could win).
+        Returns:
+            An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
+            draw if no other player robs the gang
         """
         for p in players:
             if p is not player:
@@ -275,10 +278,7 @@ class RoundEngine:
                     prevalent_wind=self.state.prevalent_wind,
                     bonus_count=len(p.bonus_tile),
                 )
-                if (
-                    hu_result.is_winning
-                    and HandPattern.THIRTEEN_WONDERS in hu_result.patterns
-                ):
+                if hu_result.is_winning and HandPattern.THIRTEEN_WONDERS in hu_result.patterns:
                     return AssessResult(
                         robbing_gang_by=p.position,
                         win=WinResult(
@@ -300,12 +300,14 @@ class RoundEngine:
         self, player: Player, tile: Tile, players: list[Player]
     ) -> AssessResult | DrawResult:
         """
-        Player upgrades an open pong to an exposed gang by adding a matching
-        hand tile. Before executing, checks if any other player can rob the
-        gang.
+        Player upgrade an open pong to an exposed gang by adding a matching hand tile.
 
-        If no one robs, returns a `DrawResult` for the replacement draw.
-        Caller should re-run assess after this.
+        Before executing, checks if any other player can rob the gang. Caller should re-run assess
+        after this.
+
+        Returns:
+            An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
+            draw if no other player robs the gang
         """
         for p in players:
             if p is not player:
@@ -340,8 +342,10 @@ class RoundEngine:
         return player.discard_tile(idx)
 
     def finalize_discard(self, tile: Tile, player: Player) -> None:
-        """Append the tile to the discard pile, advance to the next player,
-        and increment the turn counter."""
+        """
+        Append the tile to the discard pile, advance to the next player, and increment the turn
+        counter.
+        """
         self.state.add_to_discard_pile(tile)
         self.state.advance_player(player.position)
         self.state.advance_turn()
@@ -349,7 +353,8 @@ class RoundEngine:
     # Phase 4: React (meld claims on discard)
 
     def chi_tile(self, player: Player, tile: Suit) -> Tile:
-        """Execute a chi for player on tile and return the automatic discard."""
+        """
+        Execute a chi for player on tile and return the automatic discard."""
         self.execute_chi(player, tile)
         return self._discard_after_meld(player)
 
@@ -369,8 +374,8 @@ class RoundEngine:
 
     def gang_tile(self, player: Player, tile: Tile, players: list[Player]) -> Tile:
         """
-        Execute a gang (from discard claim) for player, draw the replacement
-        tile from the dead wall, and return the automatic discard.
+        Execute a gang (from discard claim) for player, draw the replacement tile from the dead
+        wall, and return the automatic discard.
         """
         self.execute_gang(player, tile)
         self.player_draw_tile(player, players, is_gang=True)
@@ -383,17 +388,16 @@ class RoundEngine:
 
     # Phase 4: Special discard-triggered wins
 
-    def check_earthly_hand_discard(
-        self, tile: Tile, non_dealers: list[Player]
-    ) -> AssessResult:
+    def check_earthly_hand_discard(self, tile: Tile, non_dealers: list[Player]) -> AssessResult:
         """
         After the dealer's first discard, check non-dealers for Earthly Hand.
 
-        Returns an AssessResult with the win if a non-dealer qualifies,
-        or an empty AssessResult.
+        Returns:
+            An `AssessResult` with the win if a non-dealer qualifies, or an empty `AssessResult`.
         """
         if self.state.turn_count != 0:
             return AssessResult()
+
         for p in non_dealers:
             hu_result = can_hu(
                 p.hand_tile,
@@ -424,8 +428,8 @@ class RoundEngine:
         - Claimant has not yet drawn a tile
         - No player has any exposed meld
 
-        Returns an AssessResult with the win if the claimant qualifies,
-        or an empty AssessResult.
+        Returns:
+            An `AssessResult` with the win if the claimant qualifies, or an empty `AssessResult`.
         """
         if self.state.turn_count >= 4:
             return AssessResult()
@@ -433,6 +437,7 @@ class RoundEngine:
             return AssessResult()
         if any(p.open_tile for p in all_players):
             return AssessResult()
+
         hu_result = can_hu(
             claimant.hand_tile,
             claimant.open_tile,
@@ -472,9 +477,9 @@ class RoundEngine:
         Replace initial bonus tiles by drawing replacement tiles from the dead wall.
 
         Returns:
-            A tuple `(replacement_tiles, all_bonus_tiles)` where `replacement_tiles`
-            are non-bonus tiles to add to the player's hand and `all_bonus_tiles` is
-            the complete list of bonus tiles collected.
+            A tuple `(replacement_tiles, all_bonus_tiles)` where `replacement_tiles` are non-bonus
+            tiles to add to the player's hand and `all_bonus_tiles` is the complete list of bonus
+            tiles collected.
         """
         if not tiles:
             return [], []

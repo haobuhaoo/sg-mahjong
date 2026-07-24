@@ -23,16 +23,16 @@ from backend.utils.helper import is_bonus_tile
 
 class GameState:
     """
-    Holds the shared mutable state of a game: the wall, the discard pile,
-    the prevalent wind, whose turn it is, and the turn counter.
+    Hold the shared mutable state of a game: the wall, the discard pile, the prevalent wind,
+    whose turn it is, and the turn counter.
 
     Tile drawing is split into two directions:
-      - Live wall (front): draw_tile() advances _start_idx forward
-      - Dead wall (back): replace_tile() retreats _end_idx backward
+      - Live wall (front): `draw_tile()` advances `_start_idx` forward
+      - Dead wall (back): `replace_tile()` retreats `_end_idx` backward
 
-    The dead wall is always the last 15 tiles, so the last live tile shifts
-    down as tiles are consumed from the dead wall. The game ends in a draw
-    when `is_live_wall_exhausted` becomes True.
+    The dead wall is always the last 15 tiles, so the last live tile shifts down as tiles are
+    consumed from the dead wall. The game ends in a draw when `is_live_wall_exhausted` becomes
+    True.
     """
 
     MAX_PLAYERS = 3
@@ -41,9 +41,7 @@ class GameState:
     TILES_PER_BATCH = 4
     DEAD_WALL_SIZE = 15
 
-    def __init__(
-        self, num_players: int, prevalent_wind: WindType, all_tiles: list[Tile]
-    ):
+    def __init__(self, num_players: int, prevalent_wind: WindType, all_tiles: list[Tile]):
         """
         Create a new game state.
 
@@ -58,9 +56,7 @@ class GameState:
             IndexError: If num_players is not in [0, 3]
         """
         if num_players < 0 or num_players > GameState.MAX_PLAYERS:
-            raise IndexError(
-                f"Number of players must be between 0 and {GameState.MAX_PLAYERS}"
-            )
+            raise IndexError(f"Number of players must be between 0 and {GameState.MAX_PLAYERS}")
         self.num_players = num_players
         self.all_tiles: list[Tile] = all_tiles
         self.discarded_tiles: list[Tile] = []
@@ -112,9 +108,7 @@ class GameState:
     @staticmethod
     def _create_honor_tiles() -> list[Honor]:
         """Create one set of honor tiles (winds and dragons)."""
-        return [Wind(wind) for wind in WindType] + [
-            Dragon(dragon) for dragon in DragonType
-        ]
+        return [Wind(wind) for wind in WindType] + [Dragon(dragon) for dragon in DragonType]
 
     @staticmethod
     def _create_bonus_tiles() -> list[Bonus]:
@@ -124,18 +118,6 @@ class GameState:
             + [Flower(flower) for flower in FlowerType]
             + [Season(season) for season in SeasonType]
         )
-
-    def draw_tile(self) -> Tile:
-        """Draw the next tile from the live wall."""
-        tile = self.all_tiles[self._start_idx]
-        self._start_idx += 1
-        return tile
-
-    def replace_tile(self) -> Tile:
-        """Draw a tile from the dead wall."""
-        tile = self.all_tiles[self._end_idx]
-        self._end_idx -= 1
-        return tile
 
     @property
     def _last_live_tile_idx(self) -> int:
@@ -149,13 +131,25 @@ class GameState:
 
     @property
     def is_last_live_tile(self) -> bool:
-        """True when the next draw_tile() will pull the last tile of the live wall."""
+        """True when the next `draw_tile()` will pull the last tile of the live wall."""
         return self.remaining_live_tiles == 1
 
     @property
     def is_live_wall_exhausted(self) -> bool:
-        """True when no tiles remain in the live wall — game ends in a draw."""
+        """True when no tiles remain in the live wall - game ends in a draw."""
         return self.remaining_live_tiles == 0
+
+    def draw_tile(self) -> Tile:
+        """Return the next tile from the live wall."""
+        tile = self.all_tiles[self._start_idx]
+        self._start_idx += 1
+        return tile
+
+    def replace_tile(self) -> Tile:
+        """Return the next tile from the dead wall."""
+        tile = self.all_tiles[self._end_idx]
+        self._end_idx -= 1
+        return tile
 
     def add_to_discard_pile(self, tile: Tile) -> None:
         """Append a tile to the discard pile."""
@@ -166,7 +160,7 @@ class GameState:
         self.current_player = (current_position + 1) % GameState.NUM_SEATS
 
     def advance_turn(self) -> None:
-        """Increment the turn counter. Called after each discard+reaction completes."""
+        """Increment the turn counter. Called after each discard + reaction completes."""
         self.turn_count += 1
 
     def get_starting_tile_indices(self, position: int) -> list[int]:
@@ -182,9 +176,7 @@ class GameState:
             indices.append(3 * batch_stride + GameState.NUM_SEATS)
         return indices
 
-    def split_starting_tiles(
-        self, indices: list[int]
-    ) -> tuple[list[Tile], list[Bonus]]:
+    def split_starting_tiles(self, indices: list[int]) -> tuple[list[Tile], list[Bonus]]:
         """Split tiles at the given wall indices into hand tiles and bonus tiles."""
         starting_hand: list[Tile] = []
         bonus_tiles: list[Bonus] = []
@@ -202,8 +194,8 @@ class GameState:
         """
         Draw (or replace) tiles until a non-bonus tile is returned.
 
-        If a bonus tile is drawn, it is passed to `collector(tile)` and a
-        replacement tile is drawn from the dead wall.
+        If a bonus tile is drawn, it is passed to `collector(tile)` and a replacement tile is drawn
+        from the dead wall.
 
         Args:
             collector: Callable that accepts a bonus tile (e.g. player.check_bonus_tile)

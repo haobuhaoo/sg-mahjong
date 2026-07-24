@@ -11,14 +11,14 @@ class DrawResult:
     Result of the draw phase (Phase 1) of a player's turn.
 
     Attributes:
-        drawn_tile: The non-bonus tile added to the player's hand, or None
-            if the draw was interrupted (e.g. by Robbing the Eighth).
-        drawn_bonus_tiles: Bonus tiles collected from the live wall during
-            this draw phase, before replacements were drawn from the dead wall.
-        robbed_by: Position of the player who robbed the drawn bonus tile
-            (Robbing the Eighth), or None if no rob occurred.
-        is_replacement: True if the final non-bonus tile came from the dead
-            wall (due to bonus replacement or gang).
+        drawn_tile: The non-bonus tile added to the player's hand, or None if the draw was
+            interrupted (e.g. by Robbing the Eighth).
+        drawn_bonus_tiles: Bonus tiles collected from the live wall during this draw phase, before
+            replacements were drawn from the dead wall.
+        robbed_by: Position of the player who robbed the drawn bonus tile (Robbing the Eighth), or
+            None if no rob occurred.
+        is_replacement: True if the final non-bonus tile came from the dead wall (due to bonus
+            replacement or gang).
         is_last_tile: True if the draw consumed the last tile of the live wall.
     """
 
@@ -50,7 +50,7 @@ class WinEvent(Enum):
 @dataclass
 class WinResult:
     """
-    Describes a winning outcome during a player's assess or react phase.
+    Describe a winning outcome during a player's assess or react phase.
 
     Attributes:
         hu: The tile-level hand-pattern analysis result.
@@ -73,10 +73,10 @@ class TurnActions:
     Available non-win actions a player can take during their turn.
 
     Attributes:
-        concealed_gang_tiles: Tiles that appear exactly 4 times in hand and can be
-            declared as a concealed gang.
-        pong_upgrade_tiles: Tiles in hand that match an existing open pong meld and
-            can be added to form an exposed gang.
+        concealed_gang_tiles: Tiles that appear exactly 4 times in hand and can be declared as a
+            concealed gang.
+        pong_upgrade_tiles: Tiles in hand that match an existing open pong meld and can be added to
+            form an exposed gang.
     """
 
     concealed_gang_tiles: list[Tile] = field(default_factory=list)
@@ -86,21 +86,18 @@ class TurnActions:
 @dataclass
 class AssessResult:
     """
-    Result of the assess phase (Phase 2) of a player's turn, or a discard-reaction
-    win check.
+    Result of the assess phase (Phase 2) of a player's turn, or a discard-reaction win check.
 
-    Aggregates win outcomes (hand-pattern-based or flower-based) and available
-    non-win actions.
+    Aggregate win outcomes (hand-pattern-based or flower-based) and available non-win actions.
 
     Attributes:
-        win: The win outcome if a hand-pattern win is detected, or None.
-            `win.winner` identifies the winning player; when `robbing_gang_by`
-            is set, the win belongs to the robber, not the acting player.
+        win: The win outcome if a hand-pattern win is detected, or None. `win.winner` identifies the
+            winning player; when `robbing_gang_by` is set, the win belongs to the robber, not the
+            acting player.
         flower_win: True if the player has all 8 Flower+Season tiles (Eight Immortals).
         actions: Available non-win actions (concealed gang, exposed gang upgrade).
-        robbing_gang_by: Position of the player who robbed the gang declarer's
-            gang (Robbing the Gang), or None. When set, the gang was blocked
-            and never executed.
+        robbing_gang_by: Position of the player who robbed the gang declarer's gang (Robbing the
+            Gang), or None. When set, the gang was blocked and never executed.
     """
 
     win: WinResult | None = None
@@ -126,7 +123,7 @@ class AssessResult:
 @dataclass
 class TurnPhase:
     """
-    Describes the current phase of a player's turn for the API layer.
+    Describe the current phase of a player's turn for the API layer.
 
     Attributes:
         phase: One of `draw`, `assess`, `discard`, `react`, or `ended`.
