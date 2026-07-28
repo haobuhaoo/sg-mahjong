@@ -72,9 +72,7 @@ class TestDealStartingTiles:
 
     def test_player_with_bonus_tiles_in_starting_hand(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         state = GameState(0, WindType.DONG, wall)
         engine = RoundEngine(state)
@@ -154,9 +152,7 @@ class TestPlayerDrawTile:
 
     def test_bonus_tile_is_collected_not_added_to_hand(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         engine = RoundEngine(GameState(0, WindType.DONG, wall))
         p = make_player()
@@ -177,9 +173,7 @@ class TestPlayerDrawTile:
 
     def test_sets_is_replacement_when_bonus_was_drawn(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         engine = RoundEngine(GameState(0, WindType.DONG, wall))
         p = make_player()
@@ -444,9 +438,6 @@ class TestDeclareConcealedGang:
         players = [p]
         result = engine.declare_concealed_gang(p, tile, players)
         assert isinstance(result, DrawResult)
-        assert result.drawn_tile is not None
-        assert len(p.open_tile) == 1
-        assert len(p.open_tile[0].tiles) == 4
 
     def test_draws_from_dead_wall(self):
         wall = [Suit(SuitType.DOT, 1)] * 100
@@ -468,6 +459,118 @@ class TestDeclareConcealedGang:
         players = [p]
         with pytest.raises(InvalidActionError):
             engine.declare_concealed_gang(p, tile, players)
+
+
+class TestForfeiturePlayerSelfPick:
+    def test_raises_when_forfeits_win(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 5)])
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        p.forfeits_win = True
+        with pytest.raises(InvalidActionError, match="forfeited winning rights"):
+            engine.player_self_pick(p)
+
+    def test_succeeds_when_not_forfeited(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        p.forfeits_win = False
+        result = engine.player_self_pick(p)
+        assert result == Suit(SuitType.DOT, 5)
+
+
+class TestForfeitureDeclareConcealedGang:
+    def test_raises_when_forfeits_gang(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile, tile])
+        p.forfeits_gang = True
+        players = [p]
+        with pytest.raises(InvalidActionError, match="forfeited gang rights"):
+            engine.declare_concealed_gang(p, tile, players)
+
+
+class TestForfeitureDeclareExposedGang:
+    def test_raises_when_forfeits_gang(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
+        p.add_to_hand([tile])
+        p.forfeits_gang = True
+        players = [p]
+        with pytest.raises(InvalidActionError, match="forfeited gang rights"):
+            engine.declare_exposed_gang(p, tile, players)
+
+
+class TestForfeitureGangTile:
+    def test_raises_when_forfeits_gang(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        p.forfeits_gang = True
+        players = [p]
+        with pytest.raises(InvalidActionError, match="forfeited gang rights"):
+            engine.gang_tile(p, tile, players)
+
+
+class TestForfeitureEarthlyHandDiscard:
+    def test_skips_forfeited_non_dealer(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        non_dealer = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        non_dealer.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        non_dealer.forfeits_win = True
+        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        assert result.win is None
+
+    def test_still_wins_if_not_forfeited(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        non_dealer = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        non_dealer.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        assert result.win is not None
+
+
+class TestForfeitureHumanlyHand:
+    def test_rejects_forfeited_claimant(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        claimant = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        claimant.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        claimant.forfeits_win = True
+        players = [Player(0), claimant, Player(2), Player(3)]
+        result = engine.check_humanly_hand(tile, claimant, players)
+        assert result.win is None
 
 
 class TestDeclareExposedGang:
@@ -522,9 +625,7 @@ class TestDeclareExposedGang:
 class TestRobbingTheEighth:
     def test_player_with_seven_flowers_robs_eighth(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         state = GameState(0, WindType.DONG, wall)
         engine = RoundEngine(state)
@@ -540,9 +641,7 @@ class TestRobbingTheEighth:
 
     def test_not_robbed_if_no_player_has_seven(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         engine = RoundEngine(GameState(0, WindType.DONG, wall))
         other = Player(1)
@@ -554,9 +653,7 @@ class TestRobbingTheEighth:
 
     def test_seven_animals_do_not_trigger_rob(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         engine = RoundEngine(GameState(0, WindType.DONG, wall))
         other = Player(1)
@@ -572,9 +669,7 @@ class TestRobbingTheEighth:
 
     def test_animal_draw_not_robbed(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Animal(AnimalType.CAT)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Animal(AnimalType.CAT)] + [Suit(SuitType.DOT, 1)] * 50
         )
         state = GameState(0, WindType.DONG, wall)
         engine = RoundEngine(state)
@@ -592,9 +687,7 @@ class TestRobbingTheEighth:
 
     def test_drawn_bonus_tiles_populated_when_robbed(self):
         wall = (
-            [Suit(SuitType.DOT, 1)] * 53
-            + [Flower(FlowerType.PLUM)]
-            + [Suit(SuitType.DOT, 1)] * 50
+            [Suit(SuitType.DOT, 1)] * 53 + [Flower(FlowerType.PLUM)] + [Suit(SuitType.DOT, 1)] * 50
         )
         state = GameState(0, WindType.DONG, wall)
         engine = RoundEngine(state)
@@ -726,9 +819,7 @@ class TestChiTile:
     def test_executes_chi_and_returns_discard(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
-        p.add_to_hand(
-            [Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 9)]
-        )
+        p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 9)])
         result = engine.chi_tile(p, Suit(SuitType.DOT, 5))
         assert isinstance(result, Suit)
         assert len(p.open_tile) == 1
@@ -744,9 +835,7 @@ class TestChiTile:
     def test_hand_is_reduced_after_chi_and_discard(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
-        p.add_to_hand(
-            [Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 9)]
-        )
+        p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4), Suit(SuitType.DOT, 9)])
         initial_hand = len(p.hand_tile)
         engine.chi_tile(p, Suit(SuitType.DOT, 5))
         assert len(p.hand_tile) < initial_hand

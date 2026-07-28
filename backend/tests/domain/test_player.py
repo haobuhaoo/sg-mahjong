@@ -9,7 +9,6 @@ from backend.domain.tiles import (
     DragonType,
     Flower,
     FlowerType,
-    MeldType,
     Season,
     SeasonType,
     Suit,
@@ -17,6 +16,7 @@ from backend.domain.tiles import (
     Wind,
     WindType,
 )
+from backend.domain.action_type import ActionType
 from backend.utils.errors import DiscardError, InvalidActionError
 
 
@@ -31,15 +31,11 @@ class TestInit:
             assert p.position == pos
 
     def test_invalid_position_negative(self):
-        with pytest.raises(
-            IndexError, match="Starting position must be between 0 and 3"
-        ):
+        with pytest.raises(IndexError, match="Starting position must be between 0 and 3"):
             Player(-1)
 
     def test_invalid_position_too_high(self):
-        with pytest.raises(
-            IndexError, match="Starting position must be between 0 and 3"
-        ):
+        with pytest.raises(IndexError, match="Starting position must be between 0 and 3"):
             Player(4)
 
     def test_default_tai_zero(self):
@@ -399,7 +395,7 @@ class TestUpdateTai:
 
     def test_resets_last_meld_tracking_after_update(self):
         p = make_player()
-        p._last_meld_type = MeldType.PONG
+        p._last_meld_type = ActionType.PONG
         p._last_meld_from_hand = [Suit(SuitType.DOT, 1)]
         p.update_tai(Suit(SuitType.DOT, 5), WindType.DONG)
         assert p._last_meld_type is None
@@ -407,7 +403,7 @@ class TestUpdateTai:
 
     def test_gang_from_open_skips_tai_and_resets_tracking(self):
         p = make_player()
-        p._last_meld_type = MeldType.GANG
+        p._last_meld_type = ActionType.GANG
         p._last_meld_from_hand = []
         p.update_tai(Dragon(DragonType.ZHONG), WindType.DONG)
         assert p.tai == 0
@@ -416,7 +412,7 @@ class TestUpdateTai:
 
     def test_gang_from_hand_proceeds_to_tai_update(self):
         p = make_player()
-        p._last_meld_type = MeldType.GANG
+        p._last_meld_type = ActionType.GANG
         p._last_meld_from_hand = [Suit(SuitType.DOT, 1)]
         p.update_tai(Dragon(DragonType.FA), WindType.DONG)
         assert p.tai == 1
@@ -642,3 +638,114 @@ class TestMakeExposedGang:
         p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
         with pytest.raises(InvalidActionError, match="Cannot form exposed gang"):
             p.make_exposed_gang(tile)
+
+
+class TestVerifyTileCount:
+    def test_defaults_false(self):
+        p = make_player()
+        assert p.forfeits_win is False
+        assert p.forfeits_gang is False
+
+    def test_normal_hand_no_open(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is False
+        assert p.forfeits_gang is False
+
+    def test_normal_hand_with_open_melds(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.open_tile = [Meld(tiles=[Suit(SuitType.DOT, 4)] * 3, is_exposed=True)]
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is False
+        assert p.forfeits_gang is False
+
+    def test_short_hand_no_open(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+        )
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is True
+        assert p.forfeits_gang is False
+
+    def test_long_hand_no_open(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)] * 2
+        )
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is True
+        assert p.forfeits_gang is True
+
+    def test_normal_after_draw(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)] * 2
+        )
+        p.verify_tile_count(expected=14)
+        assert p.forfeits_win is False
+        assert p.forfeits_gang is False
+
+    def test_short_after_draw(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.verify_tile_count(expected=14)
+        assert p.forfeits_win is True
+        assert p.forfeits_gang is False
+
+    def test_long_after_draw(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 4
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)] * 2
+        )
+        p.verify_tile_count(expected=14)
+        assert p.forfeits_win is True
+        assert p.forfeits_gang is True
+
+    def test_count_normalizes_after_recovery(self):
+        p = make_player()
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+        )
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is True
+        p.add_to_hand([Suit(SuitType.DOT, 5)])
+        p.verify_tile_count(expected=13)
+        assert p.forfeits_win is False

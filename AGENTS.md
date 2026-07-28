@@ -32,6 +32,7 @@ All imports use `backend.` prefix - commands must run from project root.
 - **Docstring/Comments width**: keep lines within 100 columns. If a natural break
   earlier in the line improves clarity, break there. Otherwise, fill the line
   up to column 100 before wrapping.
+- **Dashes**: use hyphens `-` rather than em dashes `—` in all writing.
 - All commands use Python 3.13.
 
 ## Known quirks

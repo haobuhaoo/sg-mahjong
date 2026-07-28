@@ -172,6 +172,7 @@ class GameState:
             for j in range(GameState.TILES_PER_BATCH)
         ]
         indices.append(3 * batch_stride + position)
+
         if position == 0:
             indices.append(3 * batch_stride + GameState.NUM_SEATS)
         return indices
@@ -180,12 +181,14 @@ class GameState:
         """Split tiles at the given wall indices into hand tiles and bonus tiles."""
         starting_hand: list[Tile] = []
         bonus_tiles: list[Bonus] = []
+
         for idx in indices:
             tile = self.all_tiles[idx]
             if is_bonus_tile(tile):
                 bonus_tiles.append(tile)
             else:
                 starting_hand.append(tile)
+
         return starting_hand, bonus_tiles
 
     def draw_until_non_bonus(
@@ -207,4 +210,5 @@ class GameState:
         tile = self.draw_tile() if not is_gang else self.replace_tile()
         while collector(tile):
             tile = self.replace_tile()
+
         return tile

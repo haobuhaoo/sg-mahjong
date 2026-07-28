@@ -308,11 +308,3 @@ class Season(Bonus):
             SeasonType.WINTER: 3,
         }
         return (2, season_order[self.type])
-
-
-class MeldType(StrEnum):
-    """The three claimable meld types."""
-
-    CHI = "chi"
-    PONG = "pong"
-    GANG = "gang"

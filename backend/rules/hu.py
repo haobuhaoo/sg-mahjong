@@ -299,6 +299,7 @@ def _is_three_lesser_scholars(hand_tile: list[Tile], open_tile: list[Meld]) -> b
     counter = Counter(dragon_tiles)
     if len(counter) != 3:
         return False
+
     counts = sorted(counter.values())
     return counts[0] >= 2 and counts[1] >= 3
 
@@ -332,6 +333,7 @@ def _is_four_lesser_blessings(hand_tile: list[Tile], open_tile: list[Meld]) -> b
     counter = Counter(wind_tiles)
     if len(counter) != 4:
         return False
+
     counts = sorted(counter.values())
     return counts[0] >= 2 and counts[1] >= 3
 
@@ -380,6 +382,7 @@ def _is_pure_green_suit(concealed: list[Tile], open_tile: list[Meld]) -> bool:
     all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
     if not all_tiles:
         return False
+
     return all(t in PURE_GREEN_SUIT_TILES for t in all_tiles)
 
 
@@ -402,6 +405,7 @@ def _is_pure_terminals(concealed: list[Tile], open_tile: list[Meld]) -> bool:
     all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
     if not all_tiles:
         return False
+
     return all(is_suit_tile(t) and t.number in (1, 9) for t in all_tiles)
 
 
@@ -415,12 +419,14 @@ def _is_mixed_terminals(concealed: list[Tile], open_tile: list[Meld]) -> bool:
     all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
     if not all_tiles:
         return False
+
     for t in all_tiles:
         if is_suit_tile(t):
             if t.number not in (1, 9):
                 return False
         elif not is_honor_tile(t):
             return False
+
     return True
 
 
@@ -433,6 +439,7 @@ def _is_full_flush(concealed: list[Tile], open_tile: list[Meld]) -> bool:
     all_tiles = concealed + [t for meld in open_tile for t in meld.tiles]
     if not all_tiles:
         return False
+
     suit_types = {t.type for t in all_tiles if is_suit_tile(t)}
     has_honor = any(is_honor_tile(t) for t in all_tiles)
     return len(suit_types) == 1 and not has_honor
@@ -458,6 +465,7 @@ def _is_triplets_hand(concealed: list[Tile], sets_needed: int, open_tile: list[M
     """
     if any(is_chi_meld(meld) for meld in open_tile):
         return False
+
     return _classify_concealed_sets(concealed, sets_needed, allow_sequences=False) is not None
 
 
@@ -486,10 +494,7 @@ def _is_sequence_structure(
             continue
         if isinstance(pair_tile, Dragon):
             continue
-        if isinstance(pair_tile, Wind) and pair_tile.type in (
-            seat_wind,
-            prevalent_wind,
-        ):
+        if isinstance(pair_tile, Wind) and pair_tile.type in (seat_wind, prevalent_wind):
             continue
 
         counter[pair_tile] -= 2

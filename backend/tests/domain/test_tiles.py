@@ -13,8 +13,8 @@ from backend.domain.tiles import (
     Animal,
     Flower,
     Season,
-    MeldType,
 )
+from backend.domain.action_type import ActionType
 
 
 class TestSuitType:
@@ -510,12 +510,12 @@ class TestFullSortOrder:
         assert isinstance(tiles[1], Season)
 
 
-class TestMeldType:
+class TestActionType:
     def test_chi_value(self):
-        assert MeldType.CHI == "chi"
+        assert ActionType.CHI == "chi"
 
     def test_pong_value(self):
-        assert MeldType.PONG == "pong"
+        assert ActionType.PONG == "pong"
 
     def test_gang_value(self):
-        assert MeldType.GANG == "gang"
+        assert ActionType.GANG == "gang"

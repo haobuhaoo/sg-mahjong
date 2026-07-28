@@ -1,3 +1,4 @@
+from backend.domain.action_type import ActionType
 from backend.domain.tiles import Tile
 
 
@@ -24,7 +25,7 @@ class InvalidActionError(Exception):
         tile: The tile involved in the action, if any.
     """
 
-    def __init__(self, msg: str, action: str, tile: Tile | None):
+    def __init__(self, msg: str, action: ActionType, tile: Tile | None):
         """Create an invalid action error for the given action and tile."""
         super().__init__(msg)
         self.action = action

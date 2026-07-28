@@ -1,6 +1,7 @@
 from collections import Counter
 import random
 
+from backend.domain.action_type import ActionType
 from backend.domain.meld import Meld
 from backend.domain.tiles import (
     Animal,
@@ -12,7 +13,6 @@ from backend.domain.tiles import (
     Tile,
     Wind,
     WindType,
-    MeldType,
 )
 from backend.rules.meld_discard_rules import get_invalid_discard_tiles
 from backend.utils.errors import DiscardError, InvalidActionError
@@ -46,12 +46,14 @@ class Player:
         self.open_tile: list[Meld] = []
         self.drawn_tile: Tile | None = None
         self.drawn_bonus_tiles: list[Tile] = []
+        self.forfeits_win: bool = False
+        self.forfeits_gang: bool = False
 
         # internals
         self._animals_max_tai = False
         self._flowers_max_tai = False
         self._seasons_max_tai = False
-        self._last_meld_type: MeldType | None = None
+        self._last_meld_type: ActionType | None = None
         self._last_meld_from_hand: list[Tile] = []
         self._invalid_discard_tiles: set[Tile] = set()
 
@@ -181,10 +183,10 @@ class Player:
         """
         neighbour_tiles = self._find_chi_tiles(tile_chi)
         if neighbour_tiles is None:
-            raise InvalidActionError(f"Cannot chi {tile_chi}", MeldType.CHI, tile_chi)
+            raise InvalidActionError(f"Cannot chi {tile_chi}", ActionType.CHI, tile_chi)
 
         self._make_chi_meld(tile_chi, neighbour_tiles)
-        self._set_invalid_discard_tiles(MeldType.CHI, tile_chi)
+        self._set_invalid_discard_tiles(ActionType.CHI, tile_chi)
 
     def pong_tile(self, tile_pong: Tile) -> None:
         """
@@ -194,10 +196,10 @@ class Player:
             InvalidActionError: If player does not have 2 of `tile_pong` in hand
         """
         if not self._check_pong(tile_pong):
-            raise InvalidActionError(f"Cannot pong {tile_pong}", MeldType.PONG, tile_pong)
+            raise InvalidActionError(f"Cannot pong {tile_pong}", ActionType.PONG, tile_pong)
 
         self._make_pong_meld(tile_pong)
-        self._set_invalid_discard_tiles(MeldType.PONG, tile_pong)
+        self._set_invalid_discard_tiles(ActionType.PONG, tile_pong)
 
     def gang_tile(self, tile_gang: Tile) -> None:
         """
@@ -208,10 +210,10 @@ class Player:
                 `tile_gang` in open set
         """
         if not self._check_gang(tile_gang):
-            raise InvalidActionError(f"Cannot gang {tile_gang}", MeldType.GANG, tile_gang)
+            raise InvalidActionError(f"Cannot gang {tile_gang}", ActionType.GANG, tile_gang)
 
         self._make_gang_meld(tile_gang)
-        self._set_invalid_discard_tiles(MeldType.GANG, tile_gang)
+        self._set_invalid_discard_tiles(ActionType.GANG, tile_gang)
 
     def make_concealed_gang(self, tile: Tile) -> None:
         """
@@ -224,13 +226,16 @@ class Player:
             InvalidActionError: If `tile` does not appear exactly 4 times in hand.
         """
         if self.hand_tile.count(tile) != 4:
-            raise InvalidActionError(f"Cannot form concealed gang with {tile}", MeldType.GANG, tile)
+            raise InvalidActionError(
+                f"Cannot form concealed gang with {tile}", ActionType.GANG, tile
+            )
+
         for _ in range(4):
             self._remove_from_hand(tile)
         self.add_open_tile([tile, tile, tile, tile], is_exposed=False)
-        self._last_meld_type = MeldType.GANG
+        self._last_meld_type = ActionType.GANG
         self._last_meld_from_hand = [tile, tile, tile, tile]
-        self._set_invalid_discard_tiles(MeldType.GANG, tile)
+        self._set_invalid_discard_tiles(ActionType.GANG, tile)
 
     def make_exposed_gang(self, tile: Tile) -> None:
         """
@@ -244,7 +249,8 @@ class Player:
             InvalidActionError: If `tile` is not in hand or no matching open pong meld exists.
         """
         if self.hand_tile.count(tile) < 1:
-            raise InvalidActionError(f"Cannot form exposed gang with {tile}", MeldType.GANG, tile)
+            raise InvalidActionError(f"Cannot form exposed gang with {tile}", ActionType.GANG, tile)
+
         pong_meld = next(
             (
                 meld
@@ -254,17 +260,18 @@ class Player:
             None,
         )
         if pong_meld is None:
-            raise InvalidActionError(f"No open pong to upgrade with {tile}", MeldType.GANG, tile)
+            raise InvalidActionError(f"No open pong to upgrade with {tile}", ActionType.GANG, tile)
+
         self._remove_from_hand(tile)
         pong_meld.tiles.append(tile)
         self._sort_tiles(pong_meld.tiles)
-        self._last_meld_type = MeldType.GANG
+        self._last_meld_type = ActionType.GANG
         self._last_meld_from_hand = []
-        self._set_invalid_discard_tiles(MeldType.GANG, tile)
+        self._set_invalid_discard_tiles(ActionType.GANG, tile)
 
     def update_tai(self, tile: Tile, prevalent_wind: WindType) -> None:
         """Update tai from a claimed tile, resetting last meld tracking when appropriate."""
-        if self._last_meld_type == MeldType.GANG and len(self._last_meld_from_hand) == 0:
+        if self._last_meld_type == ActionType.GANG and len(self._last_meld_from_hand) == 0:
             self._last_meld_type = None
             self._last_meld_from_hand = []
             return
@@ -280,6 +287,31 @@ class Player:
 
         self._last_meld_type = None
         self._last_meld_from_hand = []
+
+    def verify_tile_count(self, expected: int = 13) -> None:
+        """
+        Compare the player's current tile count against an expected value and set forfeiture flags
+        accordingly.
+
+        A short hand (total < expected) sets `self.forfeits_win` but leaves gang allowed - the
+        player can still declare a gang to restore the correct count. A long hand (total > expected)
+        sets both `self.forfeits_win` and `self.forfeits_gang`. If the count matches expected, both
+        flags are cleared.
+
+        Args:
+            expected: The tile-count formula total that a valid player should have at this point in
+                the turn. The total is `len(hand_tile) + 3 * len(open_tile)`.
+        """
+        total = len(self.hand_tile) + 3 * len(self.open_tile)
+        if total < expected:
+            self.forfeits_win = True
+            self.forfeits_gang = False
+        elif total > expected:
+            self.forfeits_win = True
+            self.forfeits_gang = True
+        else:
+            self.forfeits_win = False
+            self.forfeits_gang = False
 
     # Private methods
 
@@ -336,30 +368,14 @@ class Player:
         suits_value = tile.number
         lookup = {(t.type, t.number) for t in self.hand_tile if is_suit_tile(t)}
 
-        if (suits_type, suits_value + 1) in lookup and (
-            suits_type,
-            suits_value + 2,
-        ) in lookup:
-            return [
-                Suit(suits_type, suits_value + 1),
-                Suit(suits_type, suits_value + 2),
-            ]
-        if (suits_type, suits_value - 1) in lookup and (
-            suits_type,
-            suits_value + 1,
-        ) in lookup:
-            return [
-                Suit(suits_type, suits_value - 1),
-                Suit(suits_type, suits_value + 1),
-            ]
-        if (suits_type, suits_value - 2) in lookup and (
-            suits_type,
-            suits_value - 1,
-        ) in lookup:
-            return [
-                Suit(suits_type, suits_value - 2),
-                Suit(suits_type, suits_value - 1),
-            ]
+        if (suits_type, suits_value + 1) in lookup and (suits_type, suits_value + 2) in lookup:
+            return [Suit(suits_type, suits_value + 1), Suit(suits_type, suits_value + 2)]
+
+        if (suits_type, suits_value - 1) in lookup and (suits_type, suits_value + 1) in lookup:
+            return [Suit(suits_type, suits_value - 1), Suit(suits_type, suits_value + 1)]
+
+        if (suits_type, suits_value - 2) in lookup and (suits_type, suits_value - 1) in lookup:
+            return [Suit(suits_type, suits_value - 2), Suit(suits_type, suits_value - 1)]
 
         return None
 
@@ -380,7 +396,7 @@ class Player:
         first_tile = self._remove_from_hand(neighbour_tiles[0])
         second_tile = self._remove_from_hand(neighbour_tiles[1])
         self.add_open_tile([tile, first_tile, second_tile])
-        self._last_meld_type = MeldType.CHI
+        self._last_meld_type = ActionType.CHI
         self._last_meld_from_hand = [first_tile, second_tile]
 
     def _make_pong_meld(self, tile: Tile) -> None:
@@ -388,7 +404,7 @@ class Player:
         self._remove_from_hand(tile)
         self._remove_from_hand(tile)
         self.add_open_tile([tile, tile, tile])
-        self._last_meld_type = MeldType.PONG
+        self._last_meld_type = ActionType.PONG
         self._last_meld_from_hand = [tile, tile]
 
     def _make_gang_meld(self, tile: Tile) -> None:
@@ -398,7 +414,7 @@ class Player:
             self._remove_from_hand(tile)
             self._remove_from_hand(tile)
             self.add_open_tile([tile, tile, tile, tile])
-            self._last_meld_type = MeldType.GANG
+            self._last_meld_type = ActionType.GANG
             self._last_meld_from_hand = [tile, tile, tile]
         else:
             pong_meld = next(
@@ -414,10 +430,10 @@ class Player:
 
             pong_meld.tiles.append(tile)
             self._sort_tiles(pong_meld.tiles)
-            self._last_meld_type = MeldType.GANG
+            self._last_meld_type = ActionType.GANG
             self._last_meld_from_hand = []
 
-    def _set_invalid_discard_tiles(self, meld_type: MeldType, thrown_tile: Tile) -> None:
+    def _set_invalid_discard_tiles(self, meld_type: ActionType, thrown_tile: Tile) -> None:
         """Compute and store invalid discard tiles after a meld restriction."""
         self._invalid_discard_tiles = get_invalid_discard_tiles(
             meld_type, self._last_meld_from_hand, thrown_tile

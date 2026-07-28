@@ -1,3 +1,4 @@
+from backend.domain.action_type import ActionType
 from backend.domain.game_state import GameState
 from backend.domain.player import Player
 from backend.domain.tiles import Flower, Season, Suit, Tile
@@ -80,6 +81,7 @@ class RoundEngine:
                         pong_upgrade_tiles=player.find_pong_upgrade_tiles(),
                     ),
                 )
+
         return AssessResult()
 
     # Phase 1: Draw
@@ -152,6 +154,8 @@ class RoundEngine:
             )
 
         player.receive_tile(tile)
+        player.verify_tile_count(expected=14)
+
         return DrawResult(
             drawn_tile=tile,
             drawn_bonus_tiles=list(player.drawn_bonus_tiles),
@@ -234,11 +238,17 @@ class RoundEngine:
             The winning tile.
 
         Raises:
-            InvalidActionError: If the player cannot hu with the drawn tile
+            InvalidActionError: If the player cannot hu due to forfeiture or invalid hand
         """
+        if player.forfeits_win:
+            raise InvalidActionError(
+                "Player has forfeited winning rights", ActionType.SELF_PICK, None
+            )
+
         tile = player.drawn_tile
         if tile is None:
-            raise InvalidActionError("No drawn tile to self-pick with", "self-pick", tile)
+            raise InvalidActionError("No drawn tile to self-pick with", ActionType.SELF_PICK, tile)
+
         hand_without_tile = self._hand_without_drawn_tile(player)
         if not can_hu(
             hand_without_tile,
@@ -248,7 +258,8 @@ class RoundEngine:
             prevalent_wind=self.state.prevalent_wind,
             bonus_count=len(player.bonus_tile),
         ).is_winning:
-            raise InvalidActionError(f"Cannot self-pick with {tile}", "self-pick", tile)
+            raise InvalidActionError(f"Cannot self-pick with {tile}", ActionType.SELF_PICK, tile)
+
         return tile
 
     # Phase 2b: Concealed gang
@@ -268,6 +279,9 @@ class RoundEngine:
             An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
             draw if no other player robs the gang
         """
+        if player.forfeits_gang:
+            raise InvalidActionError("Player has forfeited gang rights", ActionType.GANG, tile)
+
         for p in players:
             if p is not player:
                 hu_result = can_hu(
@@ -309,6 +323,9 @@ class RoundEngine:
             An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
             draw if no other player robs the gang
         """
+        if player.forfeits_gang:
+            raise InvalidActionError("Player has forfeited gang rights", ActionType.GANG, tile)
+
         for p in players:
             if p is not player:
                 hu_result = can_hu(
@@ -339,7 +356,9 @@ class RoundEngine:
 
     def player_discard_tile(self, player: Player, idx: int) -> Tile:
         """Make the player discard the tile at `idx` from their hand."""
-        return player.discard_tile(idx)
+        tile = player.discard_tile(idx)
+        player.verify_tile_count(expected=13)
+        return tile
 
     def finalize_discard(self, tile: Tile, player: Player) -> None:
         """
@@ -377,6 +396,9 @@ class RoundEngine:
         Execute a gang (from discard claim) for player, draw the replacement tile from the dead
         wall, and return the automatic discard.
         """
+        if player.forfeits_gang:
+            raise InvalidActionError("Player has forfeited gang rights", ActionType.GANG, tile)
+
         self.execute_gang(player, tile)
         self.player_draw_tile(player, players, is_gang=True)
         return self._discard_after_meld(player)
@@ -399,6 +421,8 @@ class RoundEngine:
             return AssessResult()
 
         for p in non_dealers:
+            if p.forfeits_win:
+                continue
             hu_result = can_hu(
                 p.hand_tile,
                 p.open_tile,
@@ -417,6 +441,7 @@ class RoundEngine:
                         events=frozenset({WinEvent.EARTHLY}),
                     )
                 )
+
         return AssessResult()
 
     def check_humanly_hand(
@@ -433,7 +458,7 @@ class RoundEngine:
         """
         if self.state.turn_count >= 4:
             return AssessResult()
-        if claimant.drawn_tile is not None:
+        if claimant.forfeits_win or claimant.drawn_tile is not None:
             return AssessResult()
         if any(p.open_tile for p in all_players):
             return AssessResult()
@@ -456,6 +481,7 @@ class RoundEngine:
                     events=frozenset({WinEvent.HUMANLY}),
                 )
             )
+
         return AssessResult()
 
     # Private methods
