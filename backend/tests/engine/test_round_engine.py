@@ -524,53 +524,37 @@ class TestForfeitureGangTile:
             engine.gang_tile(p, tile, players)
 
 
-class TestForfeitureEarthlyHandDiscard:
-    def test_skips_forfeited_non_dealer(self):
+class TestForfeitureHuOnDiscard:
+    def test_skips_forfeited_player(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
-        non_dealer = Player(1)
+        player = Player(1)
         tile = Suit(SuitType.DOT, 5)
-        non_dealer.add_to_hand(
+        player.add_to_hand(
             [Suit(SuitType.DOT, 1)] * 3
             + [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
             + [Suit(SuitType.DOT, 5)]
         )
-        non_dealer.forfeits_win = True
-        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        player.forfeits_win = True
+        players = [Player(0), player, Player(2), Player(3)]
+        result = engine.check_hu_on_discard(tile, player, players)
         assert result.win is None
 
     def test_still_wins_if_not_forfeited(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
-        non_dealer = Player(1)
+        player = Player(1)
         tile = Suit(SuitType.DOT, 5)
-        non_dealer.add_to_hand(
+        player.add_to_hand(
             [Suit(SuitType.DOT, 1)] * 3
             + [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
             + [Suit(SuitType.DOT, 5)]
         )
-        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        players = [Player(0), player, Player(2), Player(3)]
+        result = engine.check_hu_on_discard(tile, player, players)
         assert result.win is not None
-
-
-class TestForfeitureHumanlyHand:
-    def test_rejects_forfeited_claimant(self):
-        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
-        claimant = Player(1)
-        tile = Suit(SuitType.DOT, 5)
-        claimant.add_to_hand(
-            [Suit(SuitType.DOT, 1)] * 3
-            + [Suit(SuitType.DOT, 2)] * 3
-            + [Suit(SuitType.DOT, 3)] * 3
-            + [Suit(SuitType.DOT, 4)] * 3
-            + [Suit(SuitType.DOT, 5)]
-        )
-        claimant.forfeits_win = True
-        players = [Player(0), claimant, Player(2), Player(3)]
-        result = engine.check_humanly_hand(tile, claimant, players)
-        assert result.win is None
 
 
 class TestDeclareExposedGang:
@@ -703,8 +687,8 @@ class TestRobbingTheEighth:
         assert result.drawn_tile is None
 
 
-class TestEarthlyHandDiscard:
-    def test_returns_win_on_first_discard(self):
+class TestHuOnDiscard:
+    def test_earthly_on_first_discard(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         non_dealer = Player(1)
         tile = Suit(SuitType.DOT, 5)
@@ -715,36 +699,15 @@ class TestEarthlyHandDiscard:
             + [Suit(SuitType.DOT, 4)] * 3
             + [Suit(SuitType.DOT, 5)]
         )
-        result = engine.check_earthly_hand_discard(tile, [non_dealer])
+        players = [Player(0), non_dealer, Player(2), Player(3)]
+        result = engine.check_hu_on_discard(tile, non_dealer, players)
         assert result.win is not None
         assert WinEvent.EARTHLY in result.win.events
         assert result.win.source == WinSource.DISCARD
 
-    def test_returns_none_after_first_turn(self):
+    def test_humanly_in_first_go_around(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         engine.state.advance_turn()
-        non_dealer = Player(1)
-        tile = Suit(SuitType.DOT, 5)
-        non_dealer.add_to_hand(
-            [Suit(SuitType.DOT, 1)] * 3
-            + [Suit(SuitType.DOT, 2)] * 3
-            + [Suit(SuitType.DOT, 3)] * 3
-            + [Suit(SuitType.DOT, 4)] * 3
-        )
-        result = engine.check_earthly_hand_discard(tile, [non_dealer])
-        assert result.win is None
-
-    def test_returns_none_if_cannot_hu(self):
-        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
-        non_dealer = Player(1)
-        tile = Suit(SuitType.DOT, 5)
-        result = engine.check_earthly_hand_discard(tile, [non_dealer])
-        assert result.win is None
-
-
-class TestHumanlyHand:
-    def test_qualifies_in_first_go_around_no_draw_no_melds(self):
-        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         claimant = Player(1)
         tile = Suit(SuitType.DOT, 5)
         claimant.add_to_hand(
@@ -755,11 +718,18 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant, Player(2), Player(3)]
-        result = engine.check_humanly_hand(tile, claimant, players)
+        result = engine.check_hu_on_discard(tile, claimant, players)
         assert result.win is not None
         assert WinEvent.HUMANLY in result.win.events
 
-    def test_fails_after_first_go_around(self):
+    def test_no_win_if_cannot_hu(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        claimant = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        result = engine.check_hu_on_discard(tile, claimant, [Player(0), claimant])
+        assert result.win is None
+
+    def test_no_event_after_first_go_around(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         for _ in range(4):
             engine.state.advance_turn()
@@ -770,13 +740,16 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant]
-        result = engine.check_humanly_hand(tile, claimant, players)
-        assert result.win is None
+        result = engine.check_hu_on_discard(tile, claimant, players)
+        assert result.win is not None
+        assert not result.win.events
 
-    def test_fails_if_already_drew(self):
+    def test_no_humanly_if_already_drew(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        engine.state.advance_turn()
         claimant = Player(1)
         claimant.receive_tile(Suit(SuitType.DOT, 1))
         tile = Suit(SuitType.DOT, 5)
@@ -785,13 +758,16 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant]
-        result = engine.check_humanly_hand(tile, claimant, players)
-        assert result.win is None
+        result = engine.check_hu_on_discard(tile, claimant, players)
+        assert result.win is not None
+        assert WinEvent.HUMANLY not in result.win.events
 
-    def test_fails_with_exposed_meld(self):
+    def test_no_humanly_with_exposed_meld(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        engine.state.advance_turn()
         claimant = Player(1)
         tile = Suit(SuitType.DOT, 5)
         claimant.add_to_hand(
@@ -799,20 +775,14 @@ class TestHumanlyHand:
             + [Suit(SuitType.DOT, 2)] * 3
             + [Suit(SuitType.DOT, 3)] * 3
             + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
         )
         exposed_player = Player(2)
         exposed_player.add_open_tile([Suit(SuitType.DOT, 7)])
         players = [Player(0), claimant, exposed_player]
-        result = engine.check_humanly_hand(tile, claimant, players)
-        assert result.win is None
-
-    def test_fails_if_cannot_hu(self):
-        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
-        claimant = Player(1)
-        tile = Suit(SuitType.DOT, 5)
-        players = [Player(0), claimant]
-        result = engine.check_humanly_hand(tile, claimant, players)
-        assert result.win is None
+        result = engine.check_hu_on_discard(tile, claimant, players)
+        assert result.win is not None
+        assert WinEvent.HUMANLY not in result.win.events
 
 
 class TestChiTile:

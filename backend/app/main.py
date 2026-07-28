@@ -32,6 +32,14 @@ def main():
             for other in plist:
                 if other is p:
                     continue
+                hu_result = round_manager.check_hu_on_discard(thrown_tile, other, plist)
+                if hu_result.win is not None:
+                    claimed = True
+                    print(other)
+                    print("---")
+                    print(game_table)
+                    print("\n")
+                    break
                 try:
                     thrown_tile = round_manager.gang_tile(other, thrown_tile, plist)
                     round_manager.finalize_discard(thrown_tile, other)

@@ -65,6 +65,7 @@ def _can_hu(
     seat_wind=WindType.DONG,
     prevalent_wind=WindType.DONG,
     bonus_count=0,
+    is_self_pick=False,
     **kwargs
 ):
     return can_hu(
@@ -74,6 +75,7 @@ def _can_hu(
         seat_wind=seat_wind,
         prevalent_wind=prevalent_wind,
         bonus_count=bonus_count,
+        is_self_pick=is_self_pick,
         **kwargs
     )
 

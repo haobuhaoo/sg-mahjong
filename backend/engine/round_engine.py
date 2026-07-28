@@ -66,6 +66,7 @@ class RoundEngine:
                 seat_wind=player.seat_wind,
                 prevalent_wind=self.state.prevalent_wind,
                 bonus_count=len(player.bonus_tile),
+                is_self_pick=True,
             )
             if hu_result.is_winning:
                 return AssessResult(
@@ -207,6 +208,7 @@ class RoundEngine:
                 seat_wind=player.seat_wind,
                 prevalent_wind=self.state.prevalent_wind,
                 bonus_count=len(player.bonus_tile),
+                is_self_pick=True,
             )
             if hu_result.is_winning:
                 events: set[WinEvent] = set()
@@ -252,14 +254,16 @@ class RoundEngine:
             raise InvalidActionError("No drawn tile to self-pick with", ActionType.SELF_PICK, tile)
 
         hand_without_tile = self._hand_without_drawn_tile(player)
-        if not can_hu(
+        hu_result = can_hu(
             hand_without_tile,
             player.open_tile,
             tile,
             seat_wind=player.seat_wind,
             prevalent_wind=self.state.prevalent_wind,
             bonus_count=len(player.bonus_tile),
-        ).is_winning:
+            is_self_pick=True,
+        )
+        if not hu_result.is_winning:
             raise InvalidActionError(f"Cannot self-pick with {tile}", ActionType.SELF_PICK, tile)
 
         return tile
@@ -293,6 +297,7 @@ class RoundEngine:
                     seat_wind=p.seat_wind,
                     prevalent_wind=self.state.prevalent_wind,
                     bonus_count=len(p.bonus_tile),
+                    is_self_pick=False,
                 )
                 if hu_result.is_winning and HandPattern.THIRTEEN_WONDERS in hu_result.patterns:
                     return AssessResult(
@@ -338,6 +343,7 @@ class RoundEngine:
                     seat_wind=p.seat_wind,
                     prevalent_wind=self.state.prevalent_wind,
                     bonus_count=len(p.bonus_tile),
+                    is_self_pick=False,
                 )
                 if hu_result.is_winning:
                     return AssessResult(
@@ -412,83 +418,57 @@ class RoundEngine:
         player.gang_tile(tile)
         player.update_tai(tile, self.state.prevalent_wind)
 
-    # Phase 4: Special discard-triggered wins
+    # Phase 4: Discard-triggered win
 
-    def check_earthly_hand_discard(self, tile: Tile, non_dealers: list[Player]) -> AssessResult:
-        """
-        After the dealer's first discard, check non-dealers for Earthly Hand.
-
-        Returns:
-            An `AssessResult` with the win if a non-dealer qualifies, or an empty `AssessResult`.
-        """
-        if self.state.turn_count != 0:
-            return AssessResult()
-
-        for p in non_dealers:
-            if p.forfeits_win:
-                continue
-            hu_result = can_hu(
-                p.hand_tile,
-                p.open_tile,
-                tile,
-                seat_wind=p.seat_wind,
-                prevalent_wind=self.state.prevalent_wind,
-                bonus_count=len(p.bonus_tile),
-            )
-            if hu_result.is_winning:
-                return AssessResult(
-                    win=WinResult(
-                        hu=hu_result,
-                        source=WinSource.DISCARD,
-                        winning_tile=tile,
-                        winner=p.position,
-                        events=frozenset({WinEvent.EARTHLY}),
-                        conceal_hand=hu_result.conceal_hand,
-                    )
-                )
-
-        return AssessResult()
-
-    def check_humanly_hand(
-        self, tile: Tile, claimant: Player, all_players: list[Player]
+    def check_hu_on_discard(
+        self, tile: Tile, player: Player, players: list[Player]
     ) -> AssessResult:
         """
-        Check if a non-dealer qualifies for Humanly Hand on a discard:
-        - First go-around (within first 4 turns)
-        - Claimant has not yet drawn a tile
-        - No player has any exposed meld
+        Check if a player can win on a discarded tile. Earthly Hand and Humanly Hand events
+        are tagged when the game context qualifies.
 
         Returns:
-            An `AssessResult` with the win if the claimant qualifies, or an empty `AssessResult`.
+            An `AssessResult` with the win if the player can hu on the discard, or an empty
+            `AssessResult`.
         """
-        if self.state.turn_count >= 4:
-            return AssessResult()
-        if claimant.forfeits_win or claimant.drawn_tile is not None:
-            return AssessResult()
-        if any(p.open_tile for p in all_players):
+        if player.forfeits_win:
             return AssessResult()
 
         hu_result = can_hu(
-            claimant.hand_tile,
-            claimant.open_tile,
+            player.hand_tile,
+            player.open_tile,
             tile,
-            seat_wind=claimant.seat_wind,
+            seat_wind=player.seat_wind,
             prevalent_wind=self.state.prevalent_wind,
-            bonus_count=len(claimant.bonus_tile),
+            bonus_count=len(player.bonus_tile),
+            is_self_pick=False,
         )
-        if hu_result.is_winning:
-            return AssessResult(
-                win=WinResult(
-                    hu=hu_result,
-                    source=WinSource.DISCARD,
-                    winning_tile=tile,
-                    winner=claimant.position,
-                    events=frozenset({WinEvent.HUMANLY}),
-                    conceal_hand=hu_result.conceal_hand,
-                )
-            )
+        if not hu_result.is_winning:
+            return AssessResult()
 
-        return AssessResult()
+        events: set[WinEvent] = set()
+
+        # Earthly Hand: dealer's first discard claimed by a non-dealer
+        if self.state.turn_count == 0 and player.position != 0:
+            events.add(WinEvent.EARTHLY)
+        # Humanly Hand: first go-around, claimant hasn't drawn a tile, no exposed melds anywhere
+        elif (
+            self.state.turn_count < 4
+            and player.drawn_tile is None
+            and not any(p.open_tile for p in players)
+        ):
+            events.add(WinEvent.HUMANLY)
+
+        return AssessResult(
+            win=WinResult(
+                hu=hu_result,
+                source=WinSource.DISCARD,
+                winning_tile=tile,
+                winner=player.position,
+                events=frozenset(events),
+                conceal_hand=hu_result.conceal_hand,
+            ),
+        )
 
     # Private methods
 

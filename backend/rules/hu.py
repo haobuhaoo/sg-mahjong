@@ -1,7 +1,7 @@
 from collections import Counter
 
 from backend.domain.meld import Meld
-from backend.domain.tiles import Dragon, Suit, Tile, Wind, WindType
+from backend.domain.tiles import Dragon, Suit, SuitType, Tile, Wind, WindType
 from backend.rules.hu_result import HandPattern, HuResult
 from backend.rules.hand_patterns import (
     FOUR_GREAT_BLESSINGS,
@@ -20,6 +20,7 @@ def can_hu(
     seat_wind: WindType,
     prevalent_wind: WindType,
     bonus_count: int,
+    is_self_pick: bool,
 ) -> HuResult:
     """
     Check if player can win with the given tile and classify the hand patterns. Detect both
@@ -49,6 +50,8 @@ def can_hu(
         seat_wind: The player's wind.
         prevalent_wind: The table's wind.
         bonus_count: The number of bonus tiles the player holds.
+        is_self_pick: True when the winning tile was drawn (self-pick); False when claimed from a
+            discard. Affects Sequence Hand claim validity.
 
     Returns:
         HuResult with `is_winning=True`, the set of applicable hand patterns, and `conceal_hand`
@@ -90,10 +93,20 @@ def can_hu(
                 if _is_mixed_terminals(concealed, open_tile):
                     patterns.add(HandPattern.MIXED_TERMINALS)
             if _is_sequence_structure(concealed, sets_needed, seat_wind, prevalent_wind):
-                if bonus_count == 0:
-                    patterns.add(HandPattern.SEQUENCE_HAND)
-                else:
-                    patterns.add(HandPattern.LESSER_SEQUENCE_HAND)
+                all_exposed_chi_with_solo = (
+                    len(open_tile) == 4
+                    and all(is_chi_meld(m) and m.is_exposed for m in open_tile)
+                    and len(hand_tile) == 1
+                )
+                if not all_exposed_chi_with_solo:
+                    wait_tiles = _analyze_wait_tiles(
+                        hand_tile, sets_needed, seat_wind, prevalent_wind
+                    )
+                    if is_self_pick or len(wait_tiles) >= 2:
+                        if bonus_count == 0:
+                            patterns.add(HandPattern.SEQUENCE_HAND)
+                        else:
+                            patterns.add(HandPattern.LESSER_SEQUENCE_HAND)
 
     # Special case: Thirteen Wonders (only valid with no open melds)
     if not open_tile and _is_thirteen_wonders(concealed):
@@ -515,3 +528,46 @@ def _is_sequence_structure(
             return True
 
     return False
+
+
+def _analyze_wait_tiles(
+    hand_tile: list[Tile],
+    sets_needed: int,
+    seat_wind: WindType,
+    prevalent_wind: WindType,
+) -> frozenset[Tile]:
+    """
+    Enumerate all 31 tile types that can complete a sequence-only hand from the given pre-win
+    `hand_tile`. Called to distinguish single-sided waits (1 tile) from multi-sided waits (>=2
+    tiles) for Sequence Hand claim validation.
+
+    Suited tiles (27 types) and Wind tiles (4 types) are enumerated and appended to `hand_tile`,
+    then tested via `_is_sequence_structure`. Dragons are skipped because `_is_sequence_structure`
+    rejects a dragon pair.
+
+    Returns:
+        A frozenset of all wait-tile candidates that produce a valid sequence-only decomposition.
+    """
+    wait_tiles: set[Tile] = set()
+
+    for suit in SuitType:
+        for n in range(1, 10):
+            candidate = Suit(suit, n)
+            if _is_sequence_structure(
+                hand_tile + [candidate], sets_needed, seat_wind, prevalent_wind
+            ):
+                wait_tiles.add(candidate)
+
+    for wind_type in WindType:
+        candidate = Wind(wind_type)
+        if candidate.type in (seat_wind, prevalent_wind):
+            continue
+        test_counter = Counter(hand_tile + [candidate])
+        if test_counter.get(candidate, 0) == 2:
+            test_counter[candidate] -= 2
+            if test_counter[candidate] == 0:
+                del test_counter[candidate]
+            if _try_decompose(test_counter, sets_needed, allow_triplets=False) is not None:
+                wait_tiles.add(candidate)
+
+    return frozenset(wait_tiles)
