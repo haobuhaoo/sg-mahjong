@@ -1149,3 +1149,96 @@ class TestLesserSequenceHand:
         result = _can_hu(hand, [], Dragon(DragonType.ZHONG), bonus_count=1)
         assert result.is_winning is True
         assert HandPattern.LESSER_SEQUENCE_HAND not in result.patterns
+
+
+class TestConcealHand:
+    def test_tgs_shortcut_conceal_true(self):
+        hand = (
+            _d(DragonType.ZHONG, 3)
+            + _d(DragonType.FA, 3)
+            + _d(DragonType.BAI, 3)
+            + _s(1, 1)
+            + _s(3, 1)
+            + _s(5, 1)
+            + _s(7, 1)
+        )
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 9))
+        assert result.is_winning is True
+        assert HandPattern.THREE_GREAT_SCHOLARS in result.patterns
+        assert HandPattern.CHICKEN_HAND not in result.patterns
+        assert result.conceal_hand is True
+
+    def test_fgb_shortcut_conceal_true(self):
+        hand = (
+            _w(WindType.DONG, 3)
+            + _w(WindType.NAN, 3)
+            + _w(WindType.XI, 3)
+            + _w(WindType.BEI, 3)
+            + _s(1, 1)
+        )
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 3))
+        assert result.is_winning is True
+        assert HandPattern.FOUR_GREAT_BLESSINGS in result.patterns
+        assert HandPattern.CHICKEN_HAND not in result.patterns
+        assert result.conceal_hand is True
+
+    def test_tgs_full_hand_conceal_false(self):
+        hand = (
+            _d(DragonType.ZHONG, 3)
+            + _d(DragonType.FA, 3)
+            + _d(DragonType.BAI, 3)
+            + _s(1, 3)
+            + _s(2, 1)
+        )
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 2))
+        assert result.is_winning is True
+        assert HandPattern.THREE_GREAT_SCHOLARS in result.patterns
+        assert HandPattern.CHICKEN_HAND in result.patterns
+        assert result.conceal_hand is False
+
+    def test_fgb_full_hand_conceal_false(self):
+        hand = (
+            _w(WindType.DONG, 3)
+            + _w(WindType.NAN, 3)
+            + _w(WindType.XI, 3)
+            + _w(WindType.BEI, 3)
+            + _s(1, 1)
+        )
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 1))
+        assert result.is_winning is True
+        assert HandPattern.FOUR_GREAT_BLESSINGS in result.patterns
+        assert HandPattern.CHICKEN_HAND in result.patterns
+        assert result.conceal_hand is False
+
+    def test_regular_hand_conceal_false(self):
+        hand = _s(1, 3) + _s(2, 3) + _s(3, 3) + _s(4, 3) + _s(5, 1)
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 5))
+        assert result.is_winning is True
+        assert HandPattern.CHICKEN_HAND in result.patterns
+        assert result.conceal_hand is False
+
+    def test_lesser_scholars_no_conceal(self):
+        hand = (
+            _d(DragonType.ZHONG, 3)
+            + _d(DragonType.FA, 3)
+            + _d(DragonType.BAI, 2)
+            + _s(1, 3)
+            + _s(2, 2)
+        )
+        result = _can_hu(hand, [], Suit(SuitType.DOT, 2))
+        assert result.is_winning is True
+        assert HandPattern.THREE_LESSER_SCHOLARS in result.patterns
+        assert result.conceal_hand is False
+
+    def test_lesser_blessings_no_conceal(self):
+        hand = (
+            _w(WindType.DONG, 3)
+            + _w(WindType.NAN, 3)
+            + _w(WindType.XI, 3)
+            + _w(WindType.BEI, 1)
+            + _s(1, 3)
+        )
+        result = _can_hu(hand, [], Wind(WindType.BEI))
+        assert result.is_winning is True
+        assert HandPattern.FOUR_LESSER_BLESSINGS in result.patterns
+        assert result.conceal_hand is False

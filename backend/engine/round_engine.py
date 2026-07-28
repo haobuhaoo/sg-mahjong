@@ -75,6 +75,7 @@ class RoundEngine:
                         winning_tile=tile,
                         winner=player.position,
                         events=frozenset({WinEvent.HEAVENLY}),
+                        conceal_hand=hu_result.conceal_hand,
                     ),
                     actions=TurnActions(
                         concealed_gang_tiles=player.find_concealed_gang_tiles(),
@@ -222,6 +223,7 @@ class RoundEngine:
                         winning_tile=tile,
                         winner=player.position,
                         events=frozenset(events),
+                        conceal_hand=hu_result.conceal_hand,
                     ),
                     actions=actions,
                 )
@@ -301,6 +303,7 @@ class RoundEngine:
                             winning_tile=tile,
                             winner=p.position,
                             events=frozenset({WinEvent.ROBBING_GANG}),
+                            conceal_hand=hu_result.conceal_hand,
                         ),
                     )
 
@@ -345,6 +348,7 @@ class RoundEngine:
                             winning_tile=tile,
                             winner=p.position,
                             events=frozenset({WinEvent.ROBBING_GANG}),
+                            conceal_hand=hu_result.conceal_hand,
                         ),
                     )
 
@@ -439,6 +443,7 @@ class RoundEngine:
                         winning_tile=tile,
                         winner=p.position,
                         events=frozenset({WinEvent.EARTHLY}),
+                        conceal_hand=hu_result.conceal_hand,
                     )
                 )
 
@@ -479,6 +484,7 @@ class RoundEngine:
                     winning_tile=tile,
                     winner=claimant.position,
                     events=frozenset({WinEvent.HUMANLY}),
+                    conceal_hand=hu_result.conceal_hand,
                 )
             )
 

@@ -51,8 +51,10 @@ def can_hu(
         bonus_count: The number of bonus tiles the player holds.
 
     Returns:
-        HuResult with `is_winning=True` and the set of applicable hand patterns if the hand is
-        winning, otherwise `HuResult(False)`.
+        HuResult with `is_winning=True`, the set of applicable hand patterns, and `conceal_hand`
+        set to True when a shortcut Three Great Scholars or Four Great Blessings win requires
+        concealing non-justifying tiles from other players. Returns `HuResult(False)` if the hand
+        is not winning.
     """
     if len(hand_tile) + 3 * len(open_tile) != 13:
         return HuResult(False)
@@ -114,7 +116,12 @@ def can_hu(
         patterns.add(HandPattern.FOUR_LESSER_BLESSINGS)
 
     if patterns:
-        return HuResult(True, frozenset(patterns))
+        conceal_hand = (
+            HandPattern.THREE_GREAT_SCHOLARS in patterns
+            or HandPattern.FOUR_GREAT_BLESSINGS in patterns
+        ) and HandPattern.CHICKEN_HAND not in patterns
+        return HuResult(True, frozenset(patterns), conceal_hand=conceal_hand)
+
     return HuResult(False)
 
 

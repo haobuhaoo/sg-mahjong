@@ -14,6 +14,7 @@ from backend.domain.tiles import (
     Season,
     SeasonType,
 )
+from backend.rules.hu_result import HandPattern
 from backend.utils.serialization import (
     serialize_tile,
     serialize_player,
@@ -56,7 +57,9 @@ class TestSerializeTile:
 class TestSerializePlayer:
     def test_returns_all_keys(self):
         p = Player(0)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert set(result.keys()) == {
             "position",
             "seat_wind",
@@ -71,22 +74,30 @@ class TestSerializePlayer:
 
     def test_position(self):
         p = Player(2)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["position"] == 2
 
     def test_seat_wind(self):
         p = Player(2)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["seat_wind"] == WindType.XI.value
 
     def test_tai(self):
         p = Player(0, tai=3)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["tai"] == 3
 
     def test_empty_hand_and_open_and_bonus(self):
         p = Player(0)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["hand_tile"] == []
         assert result["open_tile"] == []
         assert result["bonus_tile"] == []
@@ -94,14 +105,18 @@ class TestSerializePlayer:
     def test_hand_tiles_serialized(self):
         p = Player(0)
         p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2)])
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert len(result["hand_tile"]) == 2
         assert result["hand_tile"][0]["type"] == "Suit"
 
     def test_open_tiles_serialized_as_melds(self):
         p = Player(0)
         p.add_open_tile([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2), Suit(SuitType.DOT, 3)])
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert len(result["open_tile"]) == 1
         assert len(result["open_tile"][0]["tiles"]) == 3
         assert result["open_tile"][0]["tiles"][0]["type"] == "Suit"
@@ -110,28 +125,36 @@ class TestSerializePlayer:
     def test_bonus_tiles_serialized(self):
         p = Player(0)
         p.add_bonus_tile([Flower(FlowerType.PLUM)])
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert len(result["bonus_tile"]) == 1
         assert result["bonus_tile"][0]["type"] == "Flower"
 
     def test_concealed_gang_serializes_is_exposed_false(self):
         p = Player(0)
         p.add_open_tile([Suit(SuitType.DOT, 1)] * 4, is_exposed=False)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["open_tile"][0]["is_exposed"] is False
 
     def test_drawn_tile_serialized(self):
         p = Player(0)
         tile = Suit(SuitType.DOT, 5)
         p.receive_tile(tile)
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["drawn_tile"] is not None
         assert result["drawn_tile"]["type"] == "Suit"
 
     def test_drawn_bonus_tiles_serialized(self):
         p = Player(0)
         p.check_bonus_tile(Flower(FlowerType.PLUM))
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert len(result["drawn_bonus_tiles"]) == 1
         assert result["drawn_bonus_tiles"][0]["type"] == "Flower"
 
@@ -140,7 +163,9 @@ class TestSerializePlayer:
         p.add_bonus_tile([Flower(FlowerType.PLUM), Flower(FlowerType.ORCHID)])
         p.add_bonus_tile([Animal(AnimalType.CAT)])
         p.add_bonus_tile([Season(SeasonType.SPRING)])
-        result = serialize_player(p)
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
         assert result["bonus_count"] == {
             "animals": 1,
             "flowers": 2,
@@ -185,3 +210,102 @@ class TestSerializeGameState:
         state.add_to_discard_pile(Wind(WindType.DONG))
         result = serialize_game_state(state)
         assert len(result["discarded_tiles"]) == 2
+
+
+class TestConcealHandSerialization:
+    def test_conceal_false_shows_all_hand_tiles(self):
+        p = Player(0)
+        p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2)])
+        result = serialize_player(
+            p, conceal_hand=False, patterns=frozenset(), requester_position=None
+        )
+        assert len(result["hand_tile"]) == 2
+
+    def test_conceal_self_shows_all_hand_tiles(self):
+        p = Player(0)
+        p.add_to_hand(
+            [
+                Dragon(DragonType.ZHONG),
+                Dragon(DragonType.FA),
+                Suit(SuitType.DOT, 1),
+            ]
+        )
+        result = serialize_player(
+            p,
+            conceal_hand=True,
+            patterns=frozenset({HandPattern.THREE_GREAT_SCHOLARS}),
+            requester_position=0,
+        )
+        assert len(result["hand_tile"]) == 3
+
+    def test_conceal_tgs_filters_to_dragons(self):
+        p = Player(0)
+        p.add_to_hand(
+            [
+                Dragon(DragonType.ZHONG),
+                Dragon(DragonType.FA),
+                Suit(SuitType.DOT, 1),
+                Suit(SuitType.DOT, 2),
+            ]
+        )
+        result = serialize_player(
+            p,
+            conceal_hand=True,
+            patterns=frozenset({HandPattern.THREE_GREAT_SCHOLARS}),
+            requester_position=1,
+        )
+        assert len(result["hand_tile"]) == 2
+        assert result["hand_tile"][0]["type"] == "Dragon"
+        assert result["hand_tile"][1]["type"] == "Dragon"
+
+    def test_conceal_fgb_filters_to_winds(self):
+        p = Player(0)
+        p.add_to_hand(
+            [
+                Wind(WindType.DONG),
+                Wind(WindType.NAN),
+                Suit(SuitType.DOT, 1),
+                Suit(SuitType.DOT, 2),
+            ]
+        )
+        result = serialize_player(
+            p,
+            conceal_hand=True,
+            patterns=frozenset({HandPattern.FOUR_GREAT_BLESSINGS}),
+            requester_position=1,
+        )
+        assert len(result["hand_tile"]) == 2
+        assert result["hand_tile"][0]["type"] == "Wind"
+        assert result["hand_tile"][1]["type"] == "Wind"
+
+    def test_conceal_both_filters_to_dragons_and_winds(self):
+        p = Player(0)
+        p.add_to_hand(
+            [
+                Dragon(DragonType.ZHONG),
+                Wind(WindType.DONG),
+                Suit(SuitType.DOT, 1),
+            ]
+        )
+        result = serialize_player(
+            p,
+            conceal_hand=True,
+            patterns=frozenset(
+                {
+                    HandPattern.THREE_GREAT_SCHOLARS,
+                    HandPattern.FOUR_GREAT_BLESSINGS,
+                }
+            ),
+            requester_position=1,
+        )
+        assert len(result["hand_tile"]) == 2
+
+    def test_empty_hand_tiles_concealed(self):
+        p = Player(0)
+        result = serialize_player(
+            p,
+            conceal_hand=True,
+            patterns=frozenset({HandPattern.THREE_GREAT_SCHOLARS}),
+            requester_position=1,
+        )
+        assert result["hand_tile"] == []
