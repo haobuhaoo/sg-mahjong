@@ -8,9 +8,9 @@ def get_invalid_gang_discards(thrown_tile: Tile) -> set[Tile]:
     Rule: Cannot discard the same tile that was claimed to form the gang.
 
     Args:
-        thrown_tile: The tile that was thrown to trigger the gang
+        thrown_tile: The tile that was thrown to trigger the gang.
 
     Returns:
-        Set of invalid tiles to discard
+        Set of invalid tiles to discard.
     """
     return {thrown_tile}

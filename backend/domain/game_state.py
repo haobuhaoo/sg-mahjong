@@ -18,6 +18,7 @@ from backend.domain.tiles import (
     Wind,
     WindType,
 )
+from backend.rules.scoring import POINT_LIMIT
 from backend.utils.helper import is_bonus_tile
 
 
@@ -41,23 +42,34 @@ class GameState:
     TILES_PER_BATCH = 4
     DEAD_WALL_SIZE = 15
 
-    def __init__(self, num_players: int, prevalent_wind: WindType, all_tiles: list[Tile]):
+    def __init__(
+        self,
+        num_players: int,
+        prevalent_wind: WindType,
+        all_tiles: list[Tile],
+        point_limit: int = POINT_LIMIT,
+    ):
         """
         Create a new game state.
 
         Player 1 (position 0) is always the starting player.
 
         Args:
-            num_players: Number of players (0-3 valid)
-            prevalent_wind: The prevalent wind for scoring
-            all_tiles: Shuffled list of all tiles for the wall
+            num_players: Number of players (0-3 valid).
+            prevalent_wind: The prevalent wind for scoring.
+            all_tiles: Shuffled list of all tiles for the wall.
+            point_limit: The game's maximum point.
 
         Raises:
-            IndexError: If num_players is not in [0, 3]
+            ValueError: If num_players is not in [0, 3] or if point_limit is less than 0.
         """
         if num_players < 0 or num_players > GameState.MAX_PLAYERS:
-            raise IndexError(f"Number of players must be between 0 and {GameState.MAX_PLAYERS}")
+            raise ValueError(f"Number of players must be between 0 and {GameState.MAX_PLAYERS}")
+        if point_limit <= 0:
+            raise ValueError("Point limit must be greater than 0")
+
         self.num_players = num_players
+        self.point_limit = point_limit
         self.all_tiles: list[Tile] = all_tiles
         self.discarded_tiles: list[Tile] = []
         self.prevalent_wind: WindType = prevalent_wind
@@ -201,11 +213,11 @@ class GameState:
         from the dead wall.
 
         Args:
-            collector: Callable that accepts a bonus tile (e.g. player.check_bonus_tile)
-            is_gang: If True, draw from the dead wall instead of the live wall
+            collector: Callable that accepts a bonus tile (e.g. player.check_bonus_tile).
+            is_gang: If True, draw from the dead wall instead of the live wall.
 
         Returns:
-            The first non-bonus tile drawn
+            The first non-bonus tile drawn.
         """
         tile = self.draw_tile() if not is_gang else self.replace_tile()
         while collector(tile):

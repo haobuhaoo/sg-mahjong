@@ -11,10 +11,10 @@ class Tile(ABC):
         Sort the tiles in relative order (ascending):
 
         Non-bonus tiles: Character (1 to 9), Dot (1 to 9), Bamboo (1 to 9), Zhong, Fa, Bai, Dong,
-        Nan, Xi, Bei
+        Nan, Xi, Bei.
 
         Bonus tiles: Cat, Rat, Chicken, Centipede, Plum, Orchid, Chrysanthemum, Bamboo, Spring,
-        Summer, Autumn, Winter
+        Summer, Autumn, Winter.
         """
         pass
 
@@ -39,15 +39,16 @@ class Suit(Tile):
         Create a suited tile.
 
         Args:
-            type: The suit category of the tile
-            number: The tile number (1-9 valid)
+            type: The suit category of the tile.
+            number: The tile number (1-9 valid).
 
         Raises:
-            ValueError: If number is not in [1, 9]
+            ValueError: If number is not in [1, 9].
         """
-        self.type = type
         if number < 1 or number > 9:
             raise ValueError("Suit tiles are between 1 and 9")
+
+        self.type = type
         self.number = number
 
     def __str__(self):
@@ -98,7 +99,7 @@ class Honor(Tile):
         Create an honor tile.
 
         Args:
-            type: The wind or dragon variant of the tile
+            type: The wind or dragon variant of the tile.
         """
         self.type = type
 
@@ -120,7 +121,7 @@ class Dragon(Honor):
         Create a dragon tile.
 
         Args:
-            type: The dragon variant of the tile
+            type: The dragon variant of the tile.
         """
         super().__init__(type)
 
@@ -148,7 +149,7 @@ class Wind(Honor):
         Create a wind tile.
 
         Args:
-            type: The wind variant of the tile
+            type: The wind variant of the tile.
         """
         super().__init__(type)
 
@@ -205,7 +206,7 @@ class Bonus(Tile):
         Create a bonus tile.
 
         Args:
-            type: The animal, flower, or season variant of the tile
+            type: The animal, flower, or season variant of the tile.
         """
         self.type = type
 
@@ -231,7 +232,7 @@ class Animal(Bonus):
         Create an animal tile.
 
         Args:
-            type: The animal variant of the tile
+            type: The animal variant of the tile.
         """
         super().__init__(type)
 
@@ -260,7 +261,7 @@ class Flower(Bonus):
         Create a flower tile.
 
         Args:
-            type: The flower variant of the tile
+            type: The flower variant of the tile.
         """
         super().__init__(type)
 
@@ -289,7 +290,7 @@ class Season(Bonus):
         Create a season tile.
 
         Args:
-            type: The season variant of the tile
+            type: The season variant of the tile.
         """
         super().__init__(type)
 

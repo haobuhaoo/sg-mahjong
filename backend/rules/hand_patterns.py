@@ -1,6 +1,50 @@
-"""Tile-set constants used to detect set-based winning hand patterns."""
+from enum import Enum, auto
 
 from backend.domain.tiles import Dragon, DragonType, Suit, SuitType, Wind, WindType
+
+
+class HandPattern(Enum):
+    """Tile-structure-based winning hand patterns."""
+
+    THIRTEEN_WONDERS = auto()
+    THREE_GREAT_SCHOLARS = auto()
+    THREE_LESSER_SCHOLARS = auto()
+    FOUR_GREAT_BLESSINGS = auto()
+    FOUR_LESSER_BLESSINGS = auto()
+    EIGHTEEN_ARHATS = auto()
+    NINE_GATES = auto()
+    PURE_GREEN_SUIT = auto()
+    ALL_HONOUR = auto()
+    HIDDEN_TREASURE = auto()
+    PURE_TERMINALS = auto()
+    MIXED_TERMINALS = auto()
+    FULLY_CONCEALED = auto()
+    FULL_FLUSH_SEQUENCE_HAND = auto()
+    FULL_FLUSH_TRIPLETS_HAND = auto()
+    SEQUENCE_HAND = auto()
+    LESSER_SEQUENCE_HAND = auto()
+    FULL_FLUSH = auto()
+    HALF_FLUSH = auto()
+    TRIPLETS_HAND = auto()
+    CHICKEN_HAND = auto()
+
+
+SPECIAL_HAND_PATTERNS = frozenset(
+    {
+        HandPattern.THIRTEEN_WONDERS,
+        HandPattern.THREE_GREAT_SCHOLARS,
+        HandPattern.FOUR_GREAT_BLESSINGS,
+        HandPattern.EIGHTEEN_ARHATS,
+        HandPattern.NINE_GATES,
+        HandPattern.PURE_GREEN_SUIT,
+        HandPattern.ALL_HONOUR,
+        HandPattern.HIDDEN_TREASURE,
+        HandPattern.PURE_TERMINALS,
+        HandPattern.FULL_FLUSH_SEQUENCE_HAND,
+        HandPattern.FULL_FLUSH_TRIPLETS_HAND,
+    }
+)
+
 
 ZHONG = Dragon(DragonType.ZHONG)
 FA = Dragon(DragonType.FA)
@@ -20,6 +64,7 @@ SUO_4 = Suit(SuitType.BAMBOO, 4)
 SUO_6 = Suit(SuitType.BAMBOO, 6)
 SUO_8 = Suit(SuitType.BAMBOO, 8)
 SUO_9 = Suit(SuitType.BAMBOO, 9)
+
 
 THIRTEEN_WONDERS = frozenset(
     {

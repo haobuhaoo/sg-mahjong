@@ -11,7 +11,8 @@ from backend.engine.turn_result import (
     WinSource,
 )
 from backend.rules.hu import can_hu
-from backend.rules.hu_result import HandPattern
+from backend.rules.hu_result import HandPattern, HuResult
+from backend.rules.scoring import calculate_tai
 from backend.utils.errors import InvalidActionError
 from backend.utils.helper import is_bonus_tile
 
@@ -69,12 +70,23 @@ class RoundEngine:
                 is_self_pick=True,
             )
             if hu_result.is_winning:
+                tai = calculate_tai(
+                    hu_result=hu_result,
+                    win_source=WinSource.SELF_PICK,
+                    win_events=frozenset({WinEvent.HEAVENLY}),
+                    player=player,
+                    winning_tile=tile,
+                    prevalent_wind=self.state.prevalent_wind,
+                    point_limit=self.state.point_limit,
+                )
+
                 return AssessResult(
                     win=WinResult(
                         hu=hu_result,
                         source=WinSource.SELF_PICK,
                         winning_tile=tile,
                         winner=player.position,
+                        score=tai,
                         events=frozenset({WinEvent.HEAVENLY}),
                         conceal_hand=hu_result.conceal_hand,
                     ),
@@ -181,6 +193,7 @@ class RoundEngine:
         upgrade).
 
         Accept draw-context flags (from `DrawResult`) to detect event-based wins:
+        - Flower Win (Eight Immortals) when the player has all 8 Flower and Season tiles
         - Winning on Replacement Tile (`is_replacement`)
         - Winning on the Last Available Tile (`is_last_tile` without `is_replacement`)
         - Earthly Hand (`is_first_draw` for non-dealer).
@@ -197,7 +210,23 @@ class RoundEngine:
         )
 
         if player.count_flower_season_tiles() == 8:
-            return AssessResult(flower_win=True, actions=actions)
+            winning_tile = next(
+                (t for t in reversed(player.drawn_bonus_tiles) if isinstance(t, Flower, Season)),
+                player.drawn_bonus_tiles[-1] if player.drawn_bonus_tiles else player.bonus_tile[0],
+            )
+
+            return AssessResult(
+                win=WinResult(
+                    hu=HuResult(True),
+                    source=WinSource.SELF_PICK,
+                    winning_tile=winning_tile,
+                    winner=player.position,
+                    score=self.state.point_limit,
+                    conceal_hand=True,
+                ),
+                flower_win=True,
+                actions=actions,
+            )
 
         tile = player.drawn_tile
         if tile is not None:
@@ -218,12 +247,24 @@ class RoundEngine:
                     events.add(WinEvent.LAST_TILE)
                 if is_first_draw and player.position != 0:
                     events.add(WinEvent.EARTHLY)
+
+                tai = calculate_tai(
+                    hu_result=hu_result,
+                    win_source=WinSource.SELF_PICK,
+                    win_events=frozenset(events),
+                    player=player,
+                    winning_tile=tile,
+                    prevalent_wind=self.state.prevalent_wind,
+                    point_limit=self.state.point_limit,
+                )
+
                 return AssessResult(
                     win=WinResult(
                         hu=hu_result,
                         source=WinSource.SELF_PICK,
                         winning_tile=tile,
                         winner=player.position,
+                        score=tai,
                         events=frozenset(events),
                         conceal_hand=hu_result.conceal_hand,
                     ),
@@ -242,7 +283,7 @@ class RoundEngine:
             The winning tile.
 
         Raises:
-            InvalidActionError: If the player cannot hu due to forfeiture or invalid hand
+            InvalidActionError: If the player cannot hu due to forfeiture or invalid hand.
         """
         if player.forfeits_win:
             raise InvalidActionError(
@@ -283,7 +324,7 @@ class RoundEngine:
 
         Returns:
             An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
-            draw if no other player robs the gang
+            draw if no other player robs the gang.
         """
         if player.forfeits_gang:
             raise InvalidActionError("Player has forfeited gang rights", ActionType.GANG, tile)
@@ -300,6 +341,16 @@ class RoundEngine:
                     is_self_pick=False,
                 )
                 if hu_result.is_winning and HandPattern.THIRTEEN_WONDERS in hu_result.patterns:
+                    tai = calculate_tai(
+                        hu_result=hu_result,
+                        win_source=WinSource.DISCARD,
+                        win_events=frozenset({WinEvent.ROBBING_GANG}),
+                        player=p,
+                        winning_tile=tile,
+                        prevalent_wind=self.state.prevalent_wind,
+                        point_limit=self.state.point_limit,
+                    )
+
                     return AssessResult(
                         robbing_gang_by=p.position,
                         win=WinResult(
@@ -307,6 +358,7 @@ class RoundEngine:
                             source=WinSource.DISCARD,
                             winning_tile=tile,
                             winner=p.position,
+                            score=tai,
                             events=frozenset({WinEvent.ROBBING_GANG}),
                             conceal_hand=hu_result.conceal_hand,
                         ),
@@ -329,7 +381,7 @@ class RoundEngine:
 
         Returns:
             An `AssessResult` if other player robs the gang; A `DrawResult` for the replacement
-            draw if no other player robs the gang
+            draw if no other player robs the gang.
         """
         if player.forfeits_gang:
             raise InvalidActionError("Player has forfeited gang rights", ActionType.GANG, tile)
@@ -346,6 +398,16 @@ class RoundEngine:
                     is_self_pick=False,
                 )
                 if hu_result.is_winning:
+                    tai = calculate_tai(
+                        hu_result=hu_result,
+                        win_source=WinSource.DISCARD,
+                        win_events=frozenset({WinEvent.ROBBING_GANG}),
+                        player=p,
+                        winning_tile=tile,
+                        prevalent_wind=self.state.prevalent_wind,
+                        point_limit=self.state.point_limit,
+                    )
+
                     return AssessResult(
                         robbing_gang_by=p.position,
                         win=WinResult(
@@ -353,6 +415,7 @@ class RoundEngine:
                             source=WinSource.DISCARD,
                             winning_tile=tile,
                             winner=p.position,
+                            score=tai,
                             events=frozenset({WinEvent.ROBBING_GANG}),
                             conceal_hand=hu_result.conceal_hand,
                         ),
@@ -434,8 +497,7 @@ class RoundEngine:
         return actions
 
     def chi_tile(self, player: Player, tile: Suit) -> Tile:
-        """
-        Execute a chi for player on tile and return the automatic discard."""
+        """Execute a chi for player on tile and return the automatic discard."""
         self.execute_chi(player, tile)
         return self._discard_after_meld(player)
 
@@ -550,12 +612,23 @@ class RoundEngine:
         ):
             events.add(WinEvent.HUMANLY)
 
+        tai = calculate_tai(
+            hu_result=hu_result,
+            win_source=WinSource.DISCARD,
+            win_events=frozenset(events),
+            player=player,
+            winning_tile=tile,
+            prevalent_wind=self.state.prevalent_wind,
+            point_limit=self.state.point_limit,
+        )
+
         return AssessResult(
             win=WinResult(
                 hu=hu_result,
                 source=WinSource.DISCARD,
                 winning_tile=tile,
                 winner=player.position,
+                score=tai,
                 events=frozenset(events),
                 conceal_hand=hu_result.conceal_hand,
             ),

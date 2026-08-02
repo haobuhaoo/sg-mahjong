@@ -14,12 +14,12 @@ def get_invalid_discard_tiles(
     Delegates to the appropriate rule module based on meld type.
 
     Args:
-        meld_type: The type of meld done
-        meld_tiles: The tiles used from hand in the meld
-        thrown_tile: The tile that was thrown to trigger the meld
+        meld_type: The type of meld done.
+        meld_tiles: The tiles used from hand in the meld.
+        thrown_tile: The tile that was thrown to trigger the meld.
 
     Returns:
-        Set of tiles that cannot be discarded
+        Set of tiles that cannot be discarded.
     """
     if meld_type == ActionType.PONG:
         return get_invalid_pong_discards(thrown_tile)

@@ -30,14 +30,18 @@ class Player:
         Create a new player.
 
         Args:
-            position: The position of the player (0-3 valid)
-            tai: The number of tai for the player (default 0)
+            position: The position of the player (0-3 valid).
+            tai: The number of tai for the player (default 0).
 
         Raises:
-            IndexError: If position is not in [0, 3]
+            IndexError: If position is not in [0, 3].
+            ValueError: If tai is less than 0.
         """
         if position < 0 or position > 3:
             raise IndexError("Starting position must be between 0 and 3")
+        if tai < 0:
+            raise ValueError("Tai must be greater than or equal to 0")
+
         self.position = position
         self.seat_wind = list(WindType)[position]
         self.tai = tai
@@ -178,8 +182,8 @@ class Player:
         to signal the end of the player's draw-assess window.
 
         Raises:
-            IndexError: If `idx` is out of bounds
-            DiscardError: If tile at `idx` is an invalid discard tile
+            IndexError: If `idx` is out of bounds.
+            DiscardError: If tile at `idx` is an invalid discard tile.
         """
         if idx < 0 or idx >= len(self.hand_tile):
             raise IndexError(
@@ -207,7 +211,7 @@ class Player:
         Perform chi on the given suit tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If `tile_chi` has no neighbouring tiles in player's hand
+            InvalidActionError: If `tile_chi` has no neighbouring tiles in player's hand.
         """
         neighbour_tiles = self._find_chi_tiles(tile_chi)
         if neighbour_tiles is None:
@@ -222,7 +226,7 @@ class Player:
 
         Raises:
             InvalidActionError: If `tile_pong` is in `self.sacred_discards` or
-            `self.missed_discards`, or player does not have 2 of `tile_pong` in hand
+            `self.missed_discards`, or player does not have 2 of `tile_pong` in hand.
         """
         if (
             tile_pong in self.sacred_discards
@@ -240,7 +244,7 @@ class Player:
 
         Raises:
             InvalidActionError: If player does not have 3 of `tile_gang` in hand or 3 of
-            `tile_gang` in open set
+            `tile_gang` in open set.
         """
         if not self._check_gang(tile_gang):
             raise InvalidActionError(f"Cannot gang {tile_gang}", ActionType.GANG, tile_gang)
@@ -420,7 +424,7 @@ class Player:
         `self.drawn_bonus_tiles`, or invalid discard restrictions).
 
         Raises:
-            ValueError: If `tile` is not in the hand
+            ValueError: If `tile` is not in the hand.
         """
         return self.hand_tile.pop(self.hand_tile.index(tile))
 

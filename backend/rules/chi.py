@@ -11,11 +11,11 @@ def get_invalid_chi_discards(meld_tiles: list[Tile], thrown_tile: Suit) -> set[S
     - Chi CE with thrown D -> cannot throw D (gap=2, thrown=middle)
 
     Args:
-        meld_tiles: Two tiles from hand used in the chi
-        thrown_tile: The thrown tile that completed the chi
+        meld_tiles: Two tiles from hand used in the chi.
+        thrown_tile: The thrown tile that completed the chi.
 
     Returns:
-        Set of invalid tiles to discard
+        Set of invalid tiles to discard.
     """
     blocked: set[Suit] = {thrown_tile}
 

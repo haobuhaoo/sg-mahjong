@@ -35,11 +35,11 @@ class TestInit:
             assert state.num_players == n
 
     def test_invalid_num_players_negative(self):
-        with pytest.raises(IndexError, match="Number of players must be between 0 and 3"):
+        with pytest.raises(ValueError, match="Number of players must be between 0 and 3"):
             GameState(-1, WindType.DONG, make_wall())
 
     def test_invalid_num_players_too_high(self):
-        with pytest.raises(IndexError, match="Number of players must be between 0 and 3"):
+        with pytest.raises(ValueError, match="Number of players must be between 0 and 3"):
             GameState(4, WindType.DONG, make_wall())
 
     def test_default_current_player(self):

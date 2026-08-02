@@ -52,12 +52,30 @@ def serialize_player(
     }
 
 
+def serialize_game_state(state: GameState) -> dict:
+    """Serialize the shared game state to a JSON-compatible dict."""
+    return {
+        "num_players": state.num_players,
+        "prevalent_wind": state.prevalent_wind.value,
+        "current_player": state.current_player,
+        "discarded_tiles": [serialize_tile(t) for t in state.discarded_tiles],
+    }
+
+
+# Private method
+
+
 def _filter_concealed_tiles(hand_tiles: list[Tile], patterns: frozenset[HandPattern]) -> list[Tile]:
     """
-    When a player wins by Three Great Scholars or Four Great Blessings shortcut and must conceal
-    non-justifying tiles, return only the tiles that belong to the shortcut pattern: Dragons for
-    Three Great Scholars or Winds for Four Great Blessings.
+    Filter hand tiles when the winner's hand must be concealed from non-winning players.
+    Returns an empty list for flower wins (full concealment), only dragons for Three Great
+    Scholars shortcut, only winds for Four Great Blessings shortcut, or all tiles when
+    both patterns are present. Falls through to the full hand when no concealment patterns
+    apply.
     """
+    if not patterns:
+        return []
+
     has_tgs = HandPattern.THREE_GREAT_SCHOLARS in patterns
     has_fgb = HandPattern.FOUR_GREAT_BLESSINGS in patterns
 
@@ -71,13 +89,3 @@ def _filter_concealed_tiles(hand_tiles: list[Tile], patterns: frozenset[HandPatt
         return [t for t in hand_tiles if isinstance(t, Wind)]
 
     return hand_tiles
-
-
-def serialize_game_state(state: GameState) -> dict:
-    """Serialize the shared game state to a JSON-compatible dict."""
-    return {
-        "num_players": state.num_players,
-        "prevalent_wind": state.prevalent_wind.value,
-        "current_player": state.current_player,
-        "discarded_tiles": [serialize_tile(t) for t in state.discarded_tiles],
-    }

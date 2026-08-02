@@ -57,16 +57,18 @@ class WinResult:
         source: How the winning tile was acquired.
         winning_tile: The tile that completes the winning hand.
         winner: Seat position of the winning player.
+        score: Total tai earned by the winning player.
         events: Bonus-scoring game-context circumstances.
-        conceal_hand: True when the winning Three Great Scholars or Four Great Blessings is a
-            shortcut (detected without Chicken Hand) and the winner must conceal non-justifying
-            hand tiles from other players.
+        conceal_hand: True when the winner must conceal some or all hand tiles from other
+            players. Applies to shortcut Three Great Scholars / Four Great Blessings (only
+            dragons/winds revealed) and flower wins (entire hand concealed).
     """
 
     hu: HuResult
     source: WinSource
     winning_tile: Tile
     winner: int
+    score: int
     events: frozenset[WinEvent] = frozenset()
     conceal_hand: bool = False
 
