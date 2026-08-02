@@ -232,7 +232,7 @@ class RoundEngine:
 
         return AssessResult(actions=actions)
 
-    # Phase 2a: Self-pick win
+    # Phase 3a: Self-pick win
 
     def player_self_pick(self, player: Player) -> Tile:
         """
@@ -268,7 +268,7 @@ class RoundEngine:
 
         return tile
 
-    # Phase 2b: Concealed gang
+    # Phase 3b: Concealed gang
 
     def declare_concealed_gang(
         self, player: Player, tile: Tile, players: list[Player]
@@ -316,7 +316,7 @@ class RoundEngine:
         player.update_tai(tile, self.state.prevalent_wind)
         return self.player_draw_tile(player, players, is_gang=True)
 
-    # Phase 2c: Exposed gang (pong upgrade)
+    # Phase 3c: Exposed gang (pong upgrade)
 
     def declare_exposed_gang(
         self, player: Player, tile: Tile, players: list[Player]
@@ -362,7 +362,7 @@ class RoundEngine:
         player.update_tai(tile, self.state.prevalent_wind)
         return self.player_draw_tile(player, players, is_gang=True)
 
-    # Phase 3: Discard
+    # Phase 4: Discard
 
     def player_discard_tile(self, player: Player, idx: int) -> Tile:
         """Make the player discard the tile at `idx` from their hand."""
@@ -370,16 +370,68 @@ class RoundEngine:
         player.verify_tile_count(expected=13)
         return tile
 
-    def finalize_discard(self, tile: Tile, player: Player) -> None:
+    def finalize_discard(self, tile: Tile, player: Player, all_players: list[Player]) -> None:
         """
-        Append the tile to the discard pile, advance to the next player, and increment the turn
-        counter.
+        Append the tile to the discard pile, populate missed discards for other players who could
+        have claimed the tile, advance to the next player, and increment the turn counter.
         """
         self.state.add_to_discard_pile(tile)
+        for p in all_players:
+            if p is not player and self._could_claim_discard(tile, p):
+                p.add_missed_discard(tile)
         self.state.advance_player(player.position)
         self.state.advance_turn()
 
-    # Phase 4: React (meld claims on discard)
+    # Phase 4a: Discard-triggered actions
+
+    def can_hu_discard(self, tile: Tile, player: Player, players: list[Player]) -> bool:
+        """
+        Return True if the player can win by hu on the discarded tile, respecting sacred and
+        missed discard prohibitions.
+        """
+        return self._check_hu_on_discard(tile, player, players).win is not None
+
+    def can_pong_discard(self, tile: Tile, player: Player) -> bool:
+        """
+        Return True if the player can pong the discarded tile, respecting sacred and missed
+        discard prohibitions.
+        """
+        if tile in player.sacred_discards or tile in player.missed_discards:
+            return False
+        return player.can_pong(tile)
+
+    def can_gang_discard(self, tile: Tile, player: Player) -> bool:
+        """
+        Return True if the player can gang the discarded tile (sacred and missed discard
+        restrictions do not apply to gang).
+        """
+        if player.forfeits_gang:
+            return False
+        return player.can_gang(tile)
+
+    def can_chi_discard(self, tile: Tile, player: Player) -> bool:
+        """
+        Return True if the player can chi the discarded tile (sacred and missed discard
+        restrictions do not apply to chi).
+        """
+        if not isinstance(tile, Suit):
+            return False
+        return player.can_chi(tile)
+
+    def get_discard_action_types(
+        self, tile: Tile, player: Player, players: list[Player]
+    ) -> list[ActionType]:
+        """Return the list of valid action types the player can take on a discarded tile."""
+        actions: list[ActionType] = []
+        if self.can_hu_discard(tile, player, players):
+            actions.append(ActionType.HU)
+        if self.can_gang_discard(tile, player):
+            actions.append(ActionType.GANG)
+        if self.can_pong_discard(tile, player):
+            actions.append(ActionType.PONG)
+        if self.can_chi_discard(tile, player):
+            actions.append(ActionType.CHI)
+        return actions
 
     def chi_tile(self, player: Player, tile: Suit) -> Tile:
         """
@@ -417,58 +469,6 @@ class RoundEngine:
         """Perform the gang action and update tai based on the claimed tile."""
         player.gang_tile(tile)
         player.update_tai(tile, self.state.prevalent_wind)
-
-    # Phase 4: Discard-triggered win
-
-    def check_hu_on_discard(
-        self, tile: Tile, player: Player, players: list[Player]
-    ) -> AssessResult:
-        """
-        Check if a player can win on a discarded tile. Earthly Hand and Humanly Hand events
-        are tagged when the game context qualifies.
-
-        Returns:
-            An `AssessResult` with the win if the player can hu on the discard, or an empty
-            `AssessResult`.
-        """
-        if player.forfeits_win:
-            return AssessResult()
-
-        hu_result = can_hu(
-            player.hand_tile,
-            player.open_tile,
-            tile,
-            seat_wind=player.seat_wind,
-            prevalent_wind=self.state.prevalent_wind,
-            bonus_count=len(player.bonus_tile),
-            is_self_pick=False,
-        )
-        if not hu_result.is_winning:
-            return AssessResult()
-
-        events: set[WinEvent] = set()
-
-        # Earthly Hand: dealer's first discard claimed by a non-dealer
-        if self.state.turn_count == 0 and player.position != 0:
-            events.add(WinEvent.EARTHLY)
-        # Humanly Hand: first go-around, claimant hasn't drawn a tile, no exposed melds anywhere
-        elif (
-            self.state.turn_count < 4
-            and player.drawn_tile is None
-            and not any(p.open_tile for p in players)
-        ):
-            events.add(WinEvent.HUMANLY)
-
-        return AssessResult(
-            win=WinResult(
-                hu=hu_result,
-                source=WinSource.DISCARD,
-                winning_tile=tile,
-                winner=player.position,
-                events=frozenset(events),
-                conceal_hand=hu_result.conceal_hand,
-            ),
-        )
 
     # Private methods
 
@@ -510,3 +510,73 @@ class RoundEngine:
             replacement_tiles.append(tile)
 
         return replacement_tiles, bonus_tiles
+
+    def _check_hu_on_discard(
+        self, tile: Tile, player: Player, players: list[Player]
+    ) -> AssessResult:
+        """
+        Check if a player can win on a discarded tile. Earthly Hand and Humanly Hand events
+        are tagged when the game context qualifies.
+
+        Returns:
+            An `AssessResult` with the win if the player can hu on the discard, or an empty
+            `AssessResult`.
+        """
+        if player.forfeits_win or tile in player.sacred_discards or tile in player.missed_discards:
+            return AssessResult()
+
+        hu_result = can_hu(
+            player.hand_tile,
+            player.open_tile,
+            tile,
+            seat_wind=player.seat_wind,
+            prevalent_wind=self.state.prevalent_wind,
+            bonus_count=len(player.bonus_tile),
+            is_self_pick=False,
+        )
+        if not hu_result.is_winning:
+            return AssessResult()
+
+        events: set[WinEvent] = set()
+
+        # Earthly Hand: dealer's first discard claimed by a non-dealer
+        if self.state.turn_count == 0 and player.position != 0:
+            events.add(WinEvent.EARTHLY)
+        # Humanly Hand: first go-around, claimant hasn't drawn a tile, no exposed melds anywhere
+        elif (
+            self.state.turn_count < 4
+            and player.drawn_tile is None
+            and not any(p.open_tile for p in players)
+        ):
+            events.add(WinEvent.HUMANLY)
+
+        return AssessResult(
+            win=WinResult(
+                hu=hu_result,
+                source=WinSource.DISCARD,
+                winning_tile=tile,
+                winner=player.position,
+                events=frozenset(events),
+                conceal_hand=hu_result.conceal_hand,
+            ),
+        )
+
+    def _could_claim_discard(self, tile: Tile, player: Player) -> bool:
+        """
+        Return True if the player could have claimed the discarded tile for hu or pong, ignoring
+        sacred and missed discard prohibitions. Use to determine whether a tile should be
+        recorded as a missed discard when the react phase ends without any claim.
+        """
+        if player.can_pong(tile):
+            return True
+
+        hu_result = can_hu(
+            player.hand_tile,
+            player.open_tile,
+            tile,
+            seat_wind=player.seat_wind,
+            prevalent_wind=self.state.prevalent_wind,
+            bonus_count=len(player.bonus_tile),
+            is_self_pick=False,
+        )
+        return hu_result.is_winning

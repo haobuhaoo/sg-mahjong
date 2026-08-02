@@ -1,5 +1,6 @@
 import pytest
 
+from backend.domain.action_type import ActionType
 from backend.domain.game_state import GameState
 from backend.domain.meld import Meld
 from backend.domain.player import Player
@@ -226,21 +227,21 @@ class TestFinalizeDiscard:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         tile = Suit(SuitType.DOT, 5)
-        engine.finalize_discard(tile, p)
+        engine.finalize_discard(tile, p, [p])
         assert tile in engine.state.discarded_tiles
         assert engine.state.current_player == 1
 
     def test_advances_player_correctly(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = Player(2)
-        engine.finalize_discard(Suit(SuitType.DOT, 1), p)
+        engine.finalize_discard(Suit(SuitType.DOT, 1), p, [p])
         assert engine.state.current_player == 3
 
     def test_increments_turn_count(self):
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         p = make_player()
         assert engine.state.turn_count == 0
-        engine.finalize_discard(Suit(SuitType.DOT, 1), p)
+        engine.finalize_discard(Suit(SuitType.DOT, 1), p, [p])
         assert engine.state.turn_count == 1
 
 
@@ -538,7 +539,7 @@ class TestForfeitureHuOnDiscard:
         )
         player.forfeits_win = True
         players = [Player(0), player, Player(2), Player(3)]
-        result = engine.check_hu_on_discard(tile, player, players)
+        result = engine._check_hu_on_discard(tile, player, players)
         assert result.win is None
 
     def test_still_wins_if_not_forfeited(self):
@@ -553,7 +554,7 @@ class TestForfeitureHuOnDiscard:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), player, Player(2), Player(3)]
-        result = engine.check_hu_on_discard(tile, player, players)
+        result = engine._check_hu_on_discard(tile, player, players)
         assert result.win is not None
 
 
@@ -700,7 +701,7 @@ class TestHuOnDiscard:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), non_dealer, Player(2), Player(3)]
-        result = engine.check_hu_on_discard(tile, non_dealer, players)
+        result = engine._check_hu_on_discard(tile, non_dealer, players)
         assert result.win is not None
         assert WinEvent.EARTHLY in result.win.events
         assert result.win.source == WinSource.DISCARD
@@ -718,7 +719,7 @@ class TestHuOnDiscard:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant, Player(2), Player(3)]
-        result = engine.check_hu_on_discard(tile, claimant, players)
+        result = engine._check_hu_on_discard(tile, claimant, players)
         assert result.win is not None
         assert WinEvent.HUMANLY in result.win.events
 
@@ -726,7 +727,7 @@ class TestHuOnDiscard:
         engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
         claimant = Player(1)
         tile = Suit(SuitType.DOT, 5)
-        result = engine.check_hu_on_discard(tile, claimant, [Player(0), claimant])
+        result = engine._check_hu_on_discard(tile, claimant, [Player(0), claimant])
         assert result.win is None
 
     def test_no_event_after_first_go_around(self):
@@ -743,7 +744,7 @@ class TestHuOnDiscard:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant]
-        result = engine.check_hu_on_discard(tile, claimant, players)
+        result = engine._check_hu_on_discard(tile, claimant, players)
         assert result.win is not None
         assert not result.win.events
 
@@ -761,7 +762,7 @@ class TestHuOnDiscard:
             + [Suit(SuitType.DOT, 5)]
         )
         players = [Player(0), claimant]
-        result = engine.check_hu_on_discard(tile, claimant, players)
+        result = engine._check_hu_on_discard(tile, claimant, players)
         assert result.win is not None
         assert WinEvent.HUMANLY not in result.win.events
 
@@ -780,7 +781,7 @@ class TestHuOnDiscard:
         exposed_player = Player(2)
         exposed_player.add_open_tile([Suit(SuitType.DOT, 7)])
         players = [Player(0), claimant, exposed_player]
-        result = engine.check_hu_on_discard(tile, claimant, players)
+        result = engine._check_hu_on_discard(tile, claimant, players)
         assert result.win is not None
         assert WinEvent.HUMANLY not in result.win.events
 
@@ -1105,3 +1106,190 @@ class TestRobbingConcealedGang:
         players = [p, robber]
         result = engine.declare_concealed_gang(p, tile, players)
         assert isinstance(result, DrawResult)
+
+
+class TestSacredAndMissedDiscardEngine:
+    def test_can_hu_discard_blocked_by_sacred(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.add_sacred_discard(tile)
+        players = [Player(0), p, Player(2), Player(3)]
+        assert engine.can_hu_discard(tile, p, players) is False
+
+    def test_can_hu_discard_blocked_by_missed(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.add_missed_discard(tile)
+        players = [Player(0), p, Player(2), Player(3)]
+        assert engine.can_hu_discard(tile, p, players) is False
+
+    def test_can_hu_discard_not_blocked_when_cleared(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        p.add_sacred_discard(tile)
+        p.receive_tile(Suit(SuitType.DOT, 1))
+        p.hand_tile.remove(Suit(SuitType.DOT, 1))
+        players = [Player(0), p, Player(2), Player(3)]
+        assert engine.can_hu_discard(tile, p, players) is True
+
+    def test_can_pong_discard_blocked_by_sacred(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        p.add_sacred_discard(tile)
+        assert engine.can_pong_discard(tile, p) is False
+
+    def test_can_pong_discard_blocked_by_missed(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        p.add_missed_discard(tile)
+        assert engine.can_pong_discard(tile, p) is False
+
+    def test_can_pong_discard_not_blocked_without_sacred_or_missed(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        assert engine.can_pong_discard(tile, p) is True
+
+    def test_can_gang_discard_not_blocked_by_sacred(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        p.add_sacred_discard(tile)
+        assert engine.can_gang_discard(tile, p) is True
+
+    def test_can_gang_discard_not_blocked_by_missed(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        p.add_missed_discard(tile)
+        assert engine.can_gang_discard(tile, p) is True
+
+    def test_can_chi_discard_not_blocked_by_sacred(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4)])
+        p.add_sacred_discard(Suit(SuitType.DOT, 5))
+        assert engine.can_chi_discard(Suit(SuitType.DOT, 5), p) is True
+
+    def test_can_chi_discard_false_when_no_neighbours(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2)])
+        assert engine.can_chi_discard(Suit(SuitType.DOT, 9), p) is False
+
+    def test_get_discard_action_types_hu_only(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 9)
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 9)]
+        )
+        players = [Player(0), p, Player(2), Player(3)]
+        actions = engine.get_discard_action_types(tile, p, players)
+        assert actions == [ActionType.HU]
+
+    def test_get_discard_action_types_pong(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        players = [Player(0), p]
+        actions = engine.get_discard_action_types(tile, p, players)
+        assert ActionType.PONG in actions
+        assert ActionType.HU not in actions
+
+    def test_get_discard_action_types_empty_when_nothing_possible(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        players = [Player(0), p]
+        actions = engine.get_discard_action_types(tile, p, players)
+        assert actions == []
+
+    def test_get_discard_action_types_chi(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([Suit(SuitType.DOT, 6), Suit(SuitType.DOT, 7)])
+        players = [Player(0), p]
+        actions = engine.get_discard_action_types(tile, p, players)
+        assert ActionType.CHI in actions
+
+    def test_finalize_discard_populates_missed_for_eligible_player(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        discarding = Player(0)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        all_players = [discarding, p]
+        engine.finalize_discard(tile, discarding, all_players)
+        assert tile in p.missed_discards
+
+    def test_finalize_discard_skips_missed_for_ineligible_player(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        discarding = Player(0)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        all_players = [discarding, p]
+        engine.finalize_discard(tile, discarding, all_players)
+        assert tile not in p.missed_discards
+
+    def test_finalize_discard_does_not_populate_discarder(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        discarding = Player(0)
+        tile = Suit(SuitType.DOT, 5)
+        discarding.add_to_hand([tile, tile])
+        all_players = [discarding]
+        engine.finalize_discard(tile, discarding, all_players)
+        assert tile not in discarding.missed_discards
+
+    def test_finalize_discard_populates_missed_for_hu_candidate(self):
+        engine = make_engine([Suit(SuitType.DOT, 1)] * 100)
+        discarding = Player(0)
+        p = Player(1)
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand(
+            [Suit(SuitType.DOT, 1)] * 3
+            + [Suit(SuitType.DOT, 2)] * 3
+            + [Suit(SuitType.DOT, 3)] * 3
+            + [Suit(SuitType.DOT, 4)] * 3
+            + [Suit(SuitType.DOT, 5)]
+        )
+        all_players = [discarding, p]
+        engine.finalize_discard(tile, discarding, all_players)
+        assert tile in p.missed_discards

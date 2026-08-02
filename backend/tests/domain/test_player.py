@@ -749,3 +749,120 @@ class TestVerifyTileCount:
         p.add_to_hand([Suit(SuitType.DOT, 5)])
         p.verify_tile_count(expected=13)
         assert p.forfeits_win is False
+
+
+class TestSacredAndMissedDiscards:
+    def test_sacred_discards_empty_initially(self):
+        p = make_player()
+        assert p.sacred_discards == set()
+
+    def test_missed_discards_empty_initially(self):
+        p = make_player()
+        assert p.missed_discards == set()
+
+    def test_sacred_added_on_discard(self):
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2)])
+        p.discard_tile(0)
+        assert Suit(SuitType.DOT, 1) in p.sacred_discards
+
+    def test_sacred_and_missed_cleared_on_receive_tile(self):
+        p = make_player()
+        p.sacred_discards.add(Suit(SuitType.DOT, 1))
+        p.missed_discards.add(Suit(SuitType.DOT, 2))
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        assert p.sacred_discards == set()
+        assert p.missed_discards == set()
+
+    def test_add_sacred_discard(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_sacred_discard(tile)
+        assert tile in p.sacred_discards
+
+    def test_add_missed_discard(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_missed_discard(tile)
+        assert tile in p.missed_discards
+
+    def test_pong_blocked_by_sacred(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        p.add_sacred_discard(tile)
+        with pytest.raises(InvalidActionError, match="Cannot pong"):
+            p.pong_tile(tile)
+
+    def test_pong_blocked_by_missed(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        p.add_missed_discard(tile)
+        with pytest.raises(InvalidActionError, match="Cannot pong"):
+            p.pong_tile(tile)
+
+    def test_pong_not_blocked_when_sets_cleared_on_draw(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_sacred_discard(tile)
+        p.add_missed_discard(tile)
+        p.receive_tile(tile)
+        p.add_to_hand([tile, tile])
+        p.pong_tile(tile)
+        assert len(p.open_tile) == 1
+
+    def test_drawn_state_also_clears_sacred_and_missed(self):
+        p = make_player()
+        p.sacred_discards.add(Suit(SuitType.DOT, 1))
+        p.missed_discards.add(Suit(SuitType.DOT, 2))
+        p.receive_tile(Suit(SuitType.DOT, 5))
+        assert p.sacred_discards == set()
+        assert p.missed_discards == set()
+        assert p.drawn_tile == Suit(SuitType.DOT, 5)
+
+
+class TestCanPongCanGangCanChi:
+    def test_can_pong_true_with_two_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        assert p.can_pong(tile) is True
+
+    def test_can_pong_false_with_one_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile])
+        assert p.can_pong(tile) is False
+
+    def test_can_pong_false_with_none_in_hand(self):
+        p = make_player()
+        assert p.can_pong(Suit(SuitType.DOT, 5)) is False
+
+    def test_can_gang_true_with_three_in_hand(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile, tile])
+        assert p.can_gang(tile) is True
+
+    def test_can_gang_true_with_open_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.open_tile = [Meld(tiles=[tile, tile, tile], is_exposed=True)]
+        assert p.can_gang(tile) is True
+
+    def test_can_gang_false_no_three_in_hand_no_open_pong(self):
+        p = make_player()
+        tile = Suit(SuitType.DOT, 5)
+        p.add_to_hand([tile, tile])
+        assert p.can_gang(tile) is False
+
+    def test_can_chi_true_with_neighbouring_tiles(self):
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 3), Suit(SuitType.DOT, 4)])
+        assert p.can_chi(Suit(SuitType.DOT, 5)) is True
+
+    def test_can_chi_false_when_no_neighbours(self):
+        p = make_player()
+        p.add_to_hand([Suit(SuitType.DOT, 1), Suit(SuitType.DOT, 2)])
+        assert p.can_chi(Suit(SuitType.DOT, 9)) is False

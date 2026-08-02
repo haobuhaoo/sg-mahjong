@@ -48,6 +48,8 @@ class Player:
         self.drawn_bonus_tiles: list[Tile] = []
         self.forfeits_win: bool = False
         self.forfeits_gang: bool = False
+        self.sacred_discards: set[Tile] = set()
+        self.missed_discards: set[Tile] = set()
 
         # internals
         self._animals_max_tai = False
@@ -123,6 +125,14 @@ class Player:
 
         return False
 
+    def add_sacred_discard(self, tile: Tile) -> None:
+        """Mark tile as a sacred discard. The player cannot claim it for hu or pong this go-around."""
+        self.sacred_discards.add(tile)
+
+    def add_missed_discard(self, tile: Tile) -> None:
+        """Mark tile as a missed discard. The player passed on claiming it this go-around."""
+        self.missed_discards.add(tile)
+
     def find_concealed_gang_tiles(self) -> list[Tile]:
         """Return distinct tiles that appear exactly 4 times in the player's hand."""
         counts = Counter(self.hand_tile)
@@ -139,16 +149,33 @@ class Player:
             )
         ]
 
+    def can_pong(self, tile: Tile) -> bool:
+        """Return True if the player has enough hand tiles to pong the given tile."""
+        return self._check_pong(tile)
+
+    def can_gang(self, tile: Tile) -> bool:
+        """Return True if the player can form a gang for the given tile."""
+        return self._check_gang(tile)
+
+    def can_chi(self, tile: Suit) -> bool:
+        """Return True if the player can form a chi with the given suit tile."""
+        return self._find_chi_tiles(tile) is not None
+
     def receive_tile(self, tile: Tile) -> None:
-        """Receive a drawn tile into the player's hand and track it as `self.drawn_tile`."""
+        """
+        Receive a drawn tile into the player's hand and track it as `self.drawn_tile`. Also reset
+        `self.sacred_discards` and `self.missed_discards` (the player's go-around has restarted).
+        """
         self.add_to_hand([tile])
         self.drawn_tile = tile
+        self.sacred_discards = set()
+        self.missed_discards = set()
 
     def discard_tile(self, idx: int) -> Tile:
         """
-        Discard a tile from the player's hand and clear one-turn invalid discard restrictions. Also
-        clear `self.drawn_tile` and `self.drawn_bonus_tiles` to signal the end of the player's
-        draw-assess window.
+        Discard a tile from the player's hand, clear one-turn invalid discard restrictions and add
+        the tile to `self.sacred_discards`. Also clear `self.drawn_tile` and `self.drawn_bonus_tiles`
+        to signal the end of the player's draw-assess window.
 
         Raises:
             IndexError: If `idx` is out of bounds
@@ -165,6 +192,7 @@ class Player:
 
         tile = self.hand_tile.pop(idx)
         self._clear_invalid_discard_tiles()
+        self.add_sacred_discard(tile)
         self.drawn_tile = None
         self.drawn_bonus_tiles = []
         return tile
@@ -193,9 +221,14 @@ class Player:
         Perform pong on the given tile and update invalid discard restrictions.
 
         Raises:
-            InvalidActionError: If player does not have 2 of `tile_pong` in hand
+            InvalidActionError: If `tile_pong` is in `self.sacred_discards` or
+            `self.missed_discards`, or player does not have 2 of `tile_pong` in hand
         """
-        if not self._check_pong(tile_pong):
+        if (
+            tile_pong in self.sacred_discards
+            or tile_pong in self.missed_discards
+            or not self._check_pong(tile_pong)
+        ):
             raise InvalidActionError(f"Cannot pong {tile_pong}", ActionType.PONG, tile_pong)
 
         self._make_pong_meld(tile_pong)
@@ -207,7 +240,7 @@ class Player:
 
         Raises:
             InvalidActionError: If player does not have 3 of `tile_gang` in hand or 3 of
-                `tile_gang` in open set
+            `tile_gang` in open set
         """
         if not self._check_gang(tile_gang):
             raise InvalidActionError(f"Cannot gang {tile_gang}", ActionType.GANG, tile_gang)

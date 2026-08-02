@@ -2,7 +2,7 @@ from backend.domain.game_state import GameState
 from backend.domain.player import Player
 from backend.domain.tiles import Suit, WindType
 from backend.engine.round_engine import RoundEngine
-from backend.utils.errors import InvalidActionError
+from backend.utils.errors import DiscardError, InvalidActionError
 
 
 def main():
@@ -32,52 +32,53 @@ def main():
             for other in plist:
                 if other is p:
                     continue
-                hu_result = round_manager.check_hu_on_discard(thrown_tile, other, plist)
-                if hu_result.win is not None:
-                    claimed = True
-                    print(other)
-                    print("---")
-                    print(game_table)
-                    print("\n")
-                    break
                 try:
-                    thrown_tile = round_manager.gang_tile(other, thrown_tile, plist)
-                    round_manager.finalize_discard(thrown_tile, other)
-                    claimed = True
-                    print(other)
-                    print("---")
-                    print(game_table)
-                    print("\n")
-                    break
-                except InvalidActionError:
-                    pass
-                try:
-                    thrown_tile = round_manager.pong_tile(other, thrown_tile)
-                    round_manager.finalize_discard(thrown_tile, other)
-                    claimed = True
-                    print(other)
-                    print("---")
-                    print(game_table)
-                    print("\n")
-                    break
-                except InvalidActionError:
-                    pass
-                if (p.position + 1) % 4 == other.position and isinstance(
-                    thrown_tile, Suit
-                ):
-                    try:
-                        thrown_tile = round_manager.chi_tile(other, thrown_tile)
-                        round_manager.finalize_discard(thrown_tile, other)
+                    if round_manager.can_hu_discard(thrown_tile, other, plist):
                         claimed = True
                         print(other)
                         print("---")
                         print(game_table)
                         print("\n")
                         break
-                    except InvalidActionError:
-                        pass
+                    if round_manager.can_gang_discard(thrown_tile, other):
+                        thrown_tile = round_manager.gang_tile(other, thrown_tile, plist)
+                        round_manager.finalize_discard(thrown_tile, other, plist)
+                        claimed = True
+                        print(other)
+                        print("---")
+                        print(game_table)
+                        print("\n")
+                        break
+                    if round_manager.can_pong_discard(thrown_tile, other):
+                        thrown_tile = round_manager.pong_tile(other, thrown_tile)
+                        round_manager.finalize_discard(thrown_tile, other, plist)
+                        claimed = True
+                        print(other)
+                        print("---")
+                        print(game_table)
+                        print("\n")
+                        break
+                    if (
+                        (p.position + 1) % 4 == other.position
+                        and isinstance(thrown_tile, Suit)
+                        and round_manager.can_chi_discard(thrown_tile, other)
+                    ):
+                        thrown_tile = round_manager.chi_tile(other, thrown_tile)
+                        round_manager.finalize_discard(thrown_tile, other, plist)
+                        claimed = True
+                        print(other)
+                        print("---")
+                        print(game_table)
+                        print("\n")
+                        break
+                except InvalidActionError as err:
+                    print(f"------               Invalid action error: {err}")
+                    pass
+                except DiscardError as err:
+                    print(f"------               Discard error: {err}")
+                    pass
             if not claimed:
-                round_manager.finalize_discard(thrown_tile, p)
+                round_manager.finalize_discard(thrown_tile, p, plist)
         print(game_table)
     except Exception as err:
         print(f"Error: {err}")
